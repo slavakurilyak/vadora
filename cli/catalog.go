@@ -117,14 +117,28 @@ func describeProduct(product rest.Product) string {
 	return human.String()
 }
 
-// runStoresList reads the public merchant directory.
+// runStoresList reads the public merchant directory, or with --mine the stores that the
+// signed in account owns.
 func runStoresList(env *Env, args []string) error {
 	set := flagSet("stores list", env)
 	category := set.String("category", "", "only this category")
 	limit := set.Int("limit", 0, "how many stores to show, up to 100")
 	cursor := set.String("cursor", "", "the page cursor of an earlier listing")
+	mine := set.Bool("mine", false, "list the stores that your account owns instead, which needs vadora login")
 	if _, err := parse(set, args); err != nil {
 		return err
+	}
+	if *mine {
+		if *category != "" {
+			return errs.New(errs.InvalidRequest, "--mine takes no other flag")
+		}
+		if *limit != 0 {
+			return errs.New(errs.InvalidRequest, "--mine takes no other flag")
+		}
+		if *cursor != "" {
+			return errs.New(errs.InvalidRequest, "--mine takes no other flag")
+		}
+		return runMyStores(env)
 	}
 	api, err := newClient(env)
 	if err != nil {

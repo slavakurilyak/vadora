@@ -41,5 +41,14 @@ func Documents() []Document {
 		{"Receipt", "The durable proof that a payment confirmed through Vadora's own RPC belongs to an order.", Receipt{}},
 		{"Order", "One order as its buyer reads it. A confirmed payment shows paid and sync_pending until the merchant's platform acknowledges the order, and received only afterwards.", Order{}},
 		{"OrderPage", "One page of a buyer's orders.", OrderPage{}},
+		{"PlatformDetection", "Public evidence about the commerce platform behind a store URL, never an authorization.", PlatformDetection{}},
+		{"StoreURLRequest", "Names a store by its public URL.", StoreURLRequest{}},
+		{"StoreConnection", "The approval links of a connection that a merchant starts. The merchant opens the authorization link in their own browser.", StoreConnection{}},
+		{"MerchantStore", "One store that the signed in merchant owns.", MerchantStore{}},
+		{"MerchantStorePage", "The stores that the signed in merchant owns.", MerchantStorePage{}},
+		{"SkippedProduct", "One product that an import left out, and why.", SkippedProduct{}},
+		{"StoreSync", "What a product refresh did. Every new listing starts unpublished.", StoreSync{}},
+		{"ReadinessItem", "One row of a store's readiness checklist, with the evidence that completed it.", ReadinessItem{}},
+		{"StoreReadiness", "A store's readiness checklist in its fixed order, with the declared limitations and what the store's own pages show to agents.", StoreReadiness{}},
 	}
 }

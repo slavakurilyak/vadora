@@ -138,6 +138,24 @@ func render(env *Env, human string, value any) error {
 	return err
 }
 
+// printable keeps text that a server or a store supplied from steering the terminal.
+// A control character, an escape among them, becomes a space, and a long value is cut.
+func printable(text string, limit int) string {
+	cleaned := strings.Map(func(r rune) rune {
+		if r < 0x20 {
+			return ' '
+		}
+		if r == 0x7f {
+			return ' '
+		}
+		return r
+	}, text)
+	if len(cleaned) > limit {
+		return cleaned[:limit] + "..."
+	}
+	return cleaned
+}
+
 // line prints one human progress line unless the caller asked for JSON.
 func line(env *Env, format string, args ...any) {
 	if !env.JSON {

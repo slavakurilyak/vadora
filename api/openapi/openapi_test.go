@@ -45,6 +45,11 @@ var implementedPaths = []string{
 	"/v1/quotes/{id}/purchase",
 	"/v1/orders",
 	"/v1/orders/{id}",
+	"/v1/merchant/stores",
+	"/v1/stores/detect",
+	"/v1/stores/connect",
+	"/v1/stores/{id}/sync",
+	"/v1/stores/{id}/readiness",
 }
 
 // Every declared path is one the specifications name, and every path the
@@ -581,5 +586,44 @@ func TestAPathOutsideThePrefixIsRefused(t *testing.T) {
 	}
 	if err := checkOperation("/v1/products", MethodGet, operation); err != nil {
 		t.Fatalf("a versioned path was refused: %v", err)
+	}
+}
+
+// Every merchant operation requires the merchant access token and nothing else, so a
+// buyer credential and a checkout session token never administer a store.
+func TestMerchantOperationsRequireTheMerchantTokenOnly(t *testing.T) {
+	t.Parallel()
+	spec, err := Build()
+	if err != nil {
+		t.Fatalf("the document did not build: %v", err)
+	}
+	merchant := map[string][]string{
+		"/v1/merchant/stores":       {MethodGet},
+		"/v1/stores/detect":         {MethodPost},
+		"/v1/stores/connect":        {MethodPost},
+		"/v1/stores/{id}/sync":      {MethodPost},
+		"/v1/stores/{id}/readiness": {MethodGet},
+	}
+	for path, methods := range merchant {
+		for _, method := range methods {
+			operation, present := spec.Paths[path][method]
+			if !present {
+				t.Fatalf("%s %s is not declared", method, path)
+			}
+			if len(operation.Security) != 1 {
+				t.Fatalf("%s %s names %d security requirements, want exactly the merchant token", method, path, len(operation.Security))
+			}
+			if _, ok := operation.Security[0]["merchantToken"]; !ok {
+				t.Fatalf("%s %s accepts something other than the merchant token: %v", method, path, operation.Security)
+			}
+		}
+	}
+	if _, declared := spec.Components.SecuritySchemes["merchantToken"]; !declared {
+		t.Fatal("the merchant token scheme is declared")
+	}
+	for _, schema := range []string{"PlatformDetection", "StoreURLRequest", "StoreConnection", "MerchantStore", "MerchantStorePage", "StoreSync", "StoreReadiness", "ReadinessItem", "SkippedProduct"} {
+		if _, declared := spec.Components.Schemas[schema]; !declared {
+			t.Fatalf("the schema %s is derived from the shared wire type", schema)
+		}
 	}
 }

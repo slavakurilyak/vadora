@@ -28,9 +28,12 @@ type Client struct {
 	BaseURL string
 	// HTTP is the transport. A nil value uses a client with Vadora's timeout.
 	HTTP *http.Client
-	// Credential is the bearer value for buyer API calls. A :BuyerCredential: is
-	// buyer only; a plugin sign in is never sent here.
+	// Credential is the bearer value of a call: a :BuyerCredential: for buyer API
+	// calls, or the access token of the CLI's account session for merchant calls. A
+	// plugin sign in is never sent here.
 	Credential string
+	// Now reads the clock that dates a session. A nil value reads the system clock.
+	Now func() time.Time
 }
 
 // New returns a client for one origin and one credential. An empty credential
@@ -150,6 +153,8 @@ type request struct {
 	// idempotencyKey is sent as Idempotency-Key for a mutating call, so a
 	// repeated call returns the same result and repeats no effect.
 	idempotencyKey string
+	// form is a form encoded body, which the OAuth token endpoints read. It excludes body.
+	form url.Values
 	// header carries further request headers, such as PAYMENT-SIGNATURE.
 	header map[string]string
 }
@@ -211,21 +216,32 @@ func (c *Client) buildCall(ctx context.Context, req request) (*http.Request, err
 	if len(c.Credential) > MaxCredentialLength {
 		return nil, errs.New(errs.Unauthenticated, "the stored credential is malformed")
 	}
+	if req.body != nil {
+		if req.form != nil {
+			return nil, errs.New(errs.InvalidRequest, "the request names a JSON body and a form body")
+		}
+	}
 	var body io.Reader
+	contentType := ""
 	if req.body != nil {
 		encoded, err := json.Marshal(req.body)
 		if err != nil {
 			return nil, errs.New(errs.InvalidRequest, "the request body could not be encoded")
 		}
 		body = bytes.NewReader(encoded)
+		contentType = "application/json"
+	}
+	if req.form != nil {
+		body = strings.NewReader(req.form.Encode())
+		contentType = "application/x-www-form-urlencoded"
 	}
 	call, err := http.NewRequestWithContext(ctx, req.method, c.BaseURL+req.path, body)
 	if err != nil {
 		return nil, errs.New(errs.InvalidRequest, "the request could not be built")
 	}
 	call.Header.Set("Accept", "application/json")
-	if req.body != nil {
-		call.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		call.Header.Set("Content-Type", contentType)
 	}
 	if req.idempotencyKey != "" {
 		call.Header.Set("Idempotency-Key", req.idempotencyKey)

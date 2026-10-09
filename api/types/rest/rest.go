@@ -256,3 +256,88 @@ type StorePage struct {
 	Stores []Store `json:"stores"`
 	Next   string  `json:"next,omitempty"`
 }
+
+// PlatformDetection is public evidence about the commerce platform behind a store URL. It
+// never reports an authorization: it comes from bounded public requests to the store's own
+// origin.
+type PlatformDetection struct {
+	// Platform is shopify or unsupported. A store that does not answer is unsupported with
+	// the status unreachable.
+	Platform       string `json:"platform"`
+	PlatformDomain string `json:"platform_domain,omitempty"`
+	// CanonicalDomain is the host of the URL that was checked.
+	CanonicalDomain string `json:"canonical_domain"`
+	// Status is shopify, unsupported, unreachable, or store_closed.
+	Status      string   `json:"status"`
+	Limitations []string `json:"limitations"`
+	Evidence    []string `json:"evidence"`
+}
+
+// StoreURLRequest names a store by its public URL.
+type StoreURLRequest struct {
+	StoreURL string `json:"store_url"`
+}
+
+// StoreConnection holds the approval links of a connection that a merchant starts. The
+// merchant opens the authorization link in their own browser, and the platform returns to
+// Vadora's own server. It carries no credential.
+type StoreConnection struct {
+	StoreID          string   `json:"store_id"`
+	CanonicalDomain  string   `json:"canonical_domain"`
+	Platform         string   `json:"platform"`
+	PlatformDomain   string   `json:"platform_domain"`
+	InstallURL       string   `json:"install_url,omitempty"`
+	AuthorizationURL string   `json:"authorization_url"`
+	RequestedScopes  []string `json:"requested_scopes"`
+	WorkspaceURL     string   `json:"workspace_url"`
+}
+
+// MerchantStore is one store that the signed in merchant owns.
+type MerchantStore struct {
+	ID       string `json:"id"`
+	Domain   string `json:"domain"`
+	Name     string `json:"name"`
+	Platform string `json:"platform"`
+	// Status is the connection status, such as connected or disconnected.
+	Status string `json:"status"`
+	// Test marks a labeled development store.
+	Test      bool `json:"test,omitempty"`
+	Listings  int  `json:"listings"`
+	Published int  `json:"published_listings"`
+}
+
+// MerchantStorePage lists the stores that the signed in merchant owns.
+type MerchantStorePage struct {
+	Stores []MerchantStore `json:"stores"`
+}
+
+// SkippedProduct is one product that an import left out, and why.
+type SkippedProduct struct {
+	Title  string `json:"title"`
+	Reason string `json:"reason"`
+}
+
+// StoreSync reports what a product refresh did. Every new listing starts unpublished,
+// because the merchant confirms each publication in the hosted workspace.
+type StoreSync struct {
+	StoreID string           `json:"store_id"`
+	Created int              `json:"created"`
+	Updated int              `json:"updated"`
+	Skipped []SkippedProduct `json:"skipped"`
+}
+
+// ReadinessItem is one row of a store's readiness checklist.
+type ReadinessItem struct {
+	Name     string `json:"name"`
+	Complete bool   `json:"complete"`
+	Evidence string `json:"evidence,omitempty"`
+}
+
+// StoreReadiness is a store's checklist in its fixed order, with the limitations that the
+// connector declares and what the store's own public pages show to agents.
+type StoreReadiness struct {
+	StoreID      string          `json:"store_id"`
+	Items        []ReadinessItem `json:"items"`
+	Limitations  []string        `json:"limitations"`
+	AgentSurface []string        `json:"agent_surface"`
+}

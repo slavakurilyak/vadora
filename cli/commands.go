@@ -56,13 +56,13 @@ func accountCommands() []Command {
 	registered := []Command{
 		{
 			Name:    "login",
-			Summary: "Sign in to Vadora with an emailed code, or create a buyer credential",
-			Usage:   "login",
+			Summary: "Sign in with an emailed code for the store commands, or with --buyer create a buyer credential",
+			Usage:   "login [--buyer]",
 			Run:     runLogin,
 		},
 		{
 			Name:    "logout",
-			Summary: "Revoke the stored credential for this machine",
+			Summary: "Forget this machine's account session and buyer credential",
 			Usage:   "logout",
 			Run:     runLogout,
 		},
@@ -126,8 +126,8 @@ func storeCommands() []Command {
 		},
 		{
 			Name:    "stores list",
-			Summary: "List the stores this account administers",
-			Usage:   "stores list",
+			Summary: "List the public merchant directory, or your own stores with --mine",
+			Usage:   "stores list [--mine]",
 			Run:     runStoresList,
 		},
 		{

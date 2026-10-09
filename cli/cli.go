@@ -61,10 +61,20 @@ type Env struct {
 	PollInterval time.Duration
 	// WaitFor bounds how long a command waits for an order to be received.
 	WaitFor time.Duration
+	// Now reads the clock that dates the account session. Nil reads the system clock.
+	Now func() time.Time
 
 	// secrets are the values that this run loaded and must never print.
 	secrets []string
 	reader  *bufio.Reader
+}
+
+// now reads the clock of this run.
+func (e *Env) now() time.Time {
+	if e.Now != nil {
+		return e.Now()
+	}
+	return time.Now()
 }
 
 // getenv reads one setting.

@@ -222,8 +222,19 @@ func addSecuritySchemes(spec *Specification) error {
 			"purchases, and another session's token reads nothing.",
 		}, "\n"),
 	}
-	if len(spec.Components.SecuritySchemes) != 2 {
-		return fmt.Errorf("the document declares %d security schemes, want 2",
+	spec.Components.SecuritySchemes["merchantToken"] = SecurityScheme{
+		Type:         "http",
+		Scheme:       "bearer",
+		BearerFormat: "Vadora merchant access token",
+		Description: strings.Join([]string{
+			"The short lived access token that the CLI's sign in issues through OAuth with PKCE. It",
+			"carries the merchant scope, and it is refreshed with a rotating refresh token. It",
+			"administers only the stores that its account owns. A buyer credential and a checkout",
+			"session token never work on a merchant operation.",
+		}, "\n"),
+	}
+	if len(spec.Components.SecuritySchemes) != 3 {
+		return fmt.Errorf("the document declares %d security schemes, want 3",
 			len(spec.Components.SecuritySchemes))
 	}
 	return nil

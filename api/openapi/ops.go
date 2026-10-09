@@ -11,6 +11,9 @@ import (
 var (
 	credentialOnly = []map[string][]string{{"buyerCredential": {}}}
 	buyerSecurity  = []map[string][]string{{"buyerCredential": {}}, {"checkoutSession": {}}}
+	// merchantSecurity is the access token that the CLI's sign in issues. A merchant call
+	// needs the merchant scope, and no buyer credential and no checkout session token works.
+	merchantSecurity = []map[string][]string{{"merchantToken": {}}}
 )
 
 // Header names of the x402 version 2 flow (005:58, 005:66).
@@ -24,7 +27,7 @@ const (
 // exactly the routes that the server mounts on the API origin, and a test of the
 // server compares the two lists.
 func addOperations(spec *Specification) error {
-	groups := [][]route{authRoutes(), discoveryRoutes(), checkoutRoutes(), paymentRoutes(), orderRoutes()}
+	groups := [][]route{authRoutes(), discoveryRoutes(), checkoutRoutes(), paymentRoutes(), orderRoutes(), merchantRoutes()}
 	for _, group := range groups {
 		for _, entry := range group {
 			if spec.Paths[entry.path] == nil {
@@ -390,4 +393,116 @@ func checkSchema(name string, schema Schema, known map[string]Schema) error {
 		}
 	}
 	return nil
+}
+
+// merchantRoutes describe the store operations of a signed in merchant: the optional
+// equivalents of the hosted workspace's connection and refresh (001:46). Each answers only
+// to the access token of an account that owns the store, with the merchant scope. They
+// accept no spending input and move no money, and publication, the payout wallet, and
+// every refund stay in the hosted workspace (001:247).
+func merchantRoutes() []route {
+	unauthorized := errorResponse("No valid merchant access token was presented.")
+	return []route{{"/v1/merchant/stores", MethodGet, listMyStoresOperation(unauthorized)},
+		{"/v1/stores/detect", MethodPost, detectOperation(unauthorized)},
+		{"/v1/stores/connect", MethodPost, connectOperation(unauthorized)},
+		{"/v1/stores/{id}/sync", MethodPost, syncOperation(unauthorized)},
+		{"/v1/stores/{id}/readiness", MethodGet, readinessOperation(unauthorized)}}
+}
+
+func listMyStoresOperation(unauthorized Response) Operation {
+	return Operation{
+		OperationID: "listMyStores",
+		Summary:     "List the stores that this merchant owns",
+		Description: "Returns the stores that the signed in account owns, oldest first, with their connection status and listing counts. Another merchant's store never appears.",
+		Tags:        []string{"merchant"},
+		Security:    merchantSecurity,
+		Responses: map[string]Response{
+			"200": jsonResponse("The merchant's stores.", refSchema("MerchantStorePage")),
+			"401": unauthorized,
+		},
+	}
+}
+
+func detectOperation(unauthorized Response) Operation {
+	return Operation{
+		OperationID: "detectPlatform",
+		Summary:     "Detect the commerce platform behind a store URL",
+		Description: strings.Join([]string{
+			"Reads bounded public documents from the store's own origin and reports the evidence. It",
+			"contacts no platform for access and follows no redirect. An address that is not a public",
+			"HTTPS origin is refused, and a store that does not answer is reported with the status",
+			"unreachable.",
+		}, "\n"),
+		Tags: []string{"merchant"},
+		RequestBody: &RequestBody{Description: "The store's public URL.", Required: true,
+			Content: map[string]MediaType{"application/json": {Schema: refSchema("StoreURLRequest")}}},
+		Security: merchantSecurity,
+		Responses: map[string]Response{
+			"200": jsonResponse("The public evidence.", refSchema("PlatformDetection")),
+			"400": errorResponse("The store URL is not an approved public origin."),
+			"401": unauthorized,
+			"429": errorResponse("Too many detections for this account in the last hour. Retry after the interval that the answer gives."),
+		},
+	}
+}
+
+func connectOperation(unauthorized Response) Operation {
+	return Operation{
+		OperationID: "connectStore",
+		Summary:     "Start the connection of an invited store",
+		Description: strings.Join([]string{
+			"Starts the connection of a store that Vadora invited this account to connect. The answer",
+			"carries the platform's approval link, which the merchant opens in their own browser. A",
+			"store without an invitation for this account's email returns STORE_UNSUPPORTED with the",
+			"reason invitation_required, and the merchant agreement must be accepted first.",
+		}, "\n"),
+		Tags: []string{"merchant"},
+		RequestBody: &RequestBody{Description: "The store's public URL.", Required: true,
+			Content: map[string]MediaType{"application/json": {Schema: refSchema("StoreURLRequest")}}},
+		Security: merchantSecurity,
+		Responses: map[string]Response{
+			"200": jsonResponse("The approval links.", refSchema("StoreConnection")),
+			"400": errorResponse("The store URL is not an approved public origin."),
+			"401": unauthorized,
+			"422": errorResponse("The store has no invitation for this account, or the platform is not supported yet."),
+			"428": errorResponse("The merchant agreement must be accepted in the hosted workspace first."),
+		},
+	}
+}
+
+func syncOperation(unauthorized Response) Operation {
+	return Operation{
+		OperationID: "syncStore",
+		Summary:     "Read the store's products again",
+		Description: strings.Join([]string{
+			"Reads the connected store's physical products into the merchant's private preview. Every",
+			"new listing starts unpublished, and publishing needs the merchant's confirmation in the",
+			"hosted workspace. Repeating the call changes nothing beyond what the platform changed.",
+		}, "\n"),
+		Tags:       []string{"merchant"},
+		Parameters: []Parameter{idParameter("id", "The store identifier.")},
+		Security:   merchantSecurity,
+		Responses: map[string]Response{
+			"200": jsonResponse("What the refresh did.", refSchema("StoreSync")),
+			"401": unauthorized,
+			"404": errorResponse("The store belongs to another merchant, or does not exist."),
+			"429": errorResponse("Too many refreshes for this account in the last hour. Retry after the interval that the answer gives."),
+		},
+	}
+}
+
+func readinessOperation(unauthorized Response) Operation {
+	return Operation{
+		OperationID: "getStoreReadiness",
+		Summary:     "Read the store's readiness checklist",
+		Description: "Returns the checklist in its fixed order. Each completed item carries the evidence that completed it, read from the records themselves.",
+		Tags:        []string{"merchant"},
+		Parameters:  []Parameter{idParameter("id", "The store identifier.")},
+		Security:    merchantSecurity,
+		Responses: map[string]Response{
+			"200": jsonResponse("The checklist.", refSchema("StoreReadiness")),
+			"401": unauthorized,
+			"404": errorResponse("The store belongs to another merchant, or does not exist."),
+		},
+	}
 }
