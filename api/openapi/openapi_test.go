@@ -159,7 +159,10 @@ func TestOnlyThePurchaseDeclaresHTTP402WithItsChallengeHeader(t *testing.T) {
 			if !declares {
 				continue
 			}
-			if path != "/v1/quotes/{id}/purchase" || method != MethodPost {
+			if path != "/v1/quotes/{id}/purchase" {
+				t.Fatalf("the operation %s %s declares HTTP 402", method, path)
+			}
+			if method != MethodPost {
 				t.Fatalf("the operation %s %s declares HTTP 402", method, path)
 			}
 			if _, named := response.Headers["PAYMENT-REQUIRED"]; !named {
@@ -194,7 +197,13 @@ func TestThePurchaseUsesTheVersionTwoHeaders(t *testing.T) {
 			signature = &operation.Parameters[index]
 		}
 	}
-	if signature == nil || signature.In != "header" || signature.Required {
+	if signature == nil {
+		t.Fatalf("PAYMENT-SIGNATURE is an optional header, got %+v", signature)
+	}
+	if signature.In != "header" {
+		t.Fatalf("PAYMENT-SIGNATURE is an optional header, got %+v", signature)
+	}
+	if signature.Required {
 		t.Fatalf("PAYMENT-SIGNATURE is an optional header, got %+v", signature)
 	}
 	if _, named := operation.Responses["200"].Headers["PAYMENT-RESPONSE"]; !named {
@@ -302,8 +311,10 @@ func TestEverySchemaIsReachable(t *testing.T) {
 	// Money is shared with the MCP tool schemas, which show a price in that shape.
 	sharedWithTools := map[string]bool{"Money": true}
 	for name := range spec.Components.Schemas {
-		if !reachable[name] && !sharedWithTools[name] {
-			t.Fatalf("the schema %s is declared but no operation returns it", name)
+		if !reachable[name] {
+			if !sharedWithTools[name] {
+				t.Fatalf("the schema %s is declared but no operation returns it", name)
+			}
 		}
 	}
 }

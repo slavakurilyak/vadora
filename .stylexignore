@@ -1,0 +1,3 @@
+# The built ChatGPT widget is a minified bundle that esbuild generates from
+# plugins/chatgpt/ui. Its source is checked there, and the bundle is an artifact.
+plugins/chatgpt/assets/widget.js

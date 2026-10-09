@@ -150,59 +150,78 @@ type request struct {
 	// idempotencyKey is sent as Idempotency-Key for a mutating call, so a
 	// repeated call returns the same result and repeats no effect.
 	idempotencyKey string
+	// header carries further request headers, such as PAYMENT-SIGNATURE.
+	header map[string]string
 }
 
 // do performs one call and decodes the response, turning an error body into the
 // one shared catalog error, so a CLI failure carries the same code and client
 // action as the REST and MCP surfaces.
 func (c *Client) do(ctx context.Context, req request, out any) error {
+	status, _, payload, err := c.send(ctx, req)
+	if err != nil {
+		return err
+	}
+	return decodeResponse(status, payload, out)
+}
+
+// send performs one call and returns the status, the headers, and the bounded
+// body without interpreting them, so the purchase can read its x402 headers.
+func (c *Client) send(ctx context.Context, req request) (int, http.Header, []byte, error) {
+	call, err := c.buildCall(ctx, req)
+	if err != nil {
+		return 0, nil, nil, err
+	}
 	if c.HTTP == nil {
 		c.HTTP = newHTTPClient()
 	}
+	response, err := c.HTTP.Do(call)
+	if err != nil {
+		return 0, nil, nil, errs.New(errs.StoreUnavailable, "the API did not answer")
+	}
+	defer response.Body.Close()
+	payload, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes))
+	if err != nil {
+		return 0, nil, nil, errs.New(errs.StoreUnavailable, "the API answer could not be read")
+	}
+	return response.StatusCode, response.Header, payload, nil
+}
+
+// buildCall turns one request into an HTTP request, and refuses what the server
+// would refuse: a path that leaves the API, a malformed credential, or no context.
+func (c *Client) buildCall(ctx context.Context, req request) (*http.Request, error) {
 	if ctx == nil {
-		return errs.New(errs.InvalidRequest, "the call needs a context")
+		return nil, errs.New(errs.InvalidRequest, "the call needs a context")
 	}
 	if c.BaseURL == "" {
-		return errs.New(errs.InvalidRequest, "the client has no API origin")
+		return nil, errs.New(errs.InvalidRequest, "the call has no origin or no method")
 	}
 	if req.method == "" {
-		return errs.New(errs.InvalidRequest, "the call has no method")
+		return nil, errs.New(errs.InvalidRequest, "the call has no origin or no method")
+	}
+	if !strings.HasPrefix(req.path, "/") {
+		return nil, errs.New(errs.InvalidRequest, "the call path must be absolute and stay inside the API")
+	}
+	if strings.Contains(req.path, "..") {
+		return nil, errs.New(errs.InvalidRequest, "the call path must be absolute and stay inside the API")
+	}
+	if strings.ContainsAny(c.Credential, " \t\r\n") {
+		return nil, errs.New(errs.Unauthenticated, "the stored credential is malformed")
+	}
+	if len(c.Credential) > MaxCredentialLength {
+		return nil, errs.New(errs.Unauthenticated, "the stored credential is malformed")
 	}
 	var body io.Reader
 	if req.body != nil {
 		encoded, err := json.Marshal(req.body)
 		if err != nil {
-			return errs.New(errs.InvalidRequest, "the request body could not be encoded")
+			return nil, errs.New(errs.InvalidRequest, "the request body could not be encoded")
 		}
 		body = bytes.NewReader(encoded)
 	}
-	target := c.BaseURL + req.path
-	if len(target) <= len(c.BaseURL) {
-		return errs.New(errs.InvalidRequest, "the call has no path")
-	}
-	call, err := http.NewRequestWithContext(ctx, req.method, target, body)
+	call, err := http.NewRequestWithContext(ctx, req.method, c.BaseURL+req.path, body)
 	if err != nil {
-		return errs.New(errs.InvalidRequest, "the request could not be built")
-	}
-	if call.URL.String() != target {
-		return errs.New(errs.InvalidRequest, "the request URL changed while it was built")
-	}
-	if call.Method != req.method {
-		return errs.New(errs.InvalidRequest, "the request method changed while it was built")
-	}
-	if !strings.HasPrefix(req.path, "/") {
-		return errs.New(errs.InvalidRequest, "the call path must be absolute")
-	}
-	if strings.Contains(req.path, "..") {
-		return errs.New(errs.InvalidRequest, "the call path traverses upwards")
-	}
-	if c.Credential != "" {
-		if strings.ContainsAny(c.Credential, " \t\n") {
-			return errs.New(errs.Unauthenticated, "the stored credential is malformed")
-		}
-		if len(c.Credential) > MaxCredentialLength {
-			return errs.New(errs.Unauthenticated, "the stored credential is too long")
-		}
+		return nil, errs.New(errs.InvalidRequest, "the request could not be built")
 	}
 	call.Header.Set("Accept", "application/json")
 	if req.body != nil {
@@ -211,19 +230,13 @@ func (c *Client) do(ctx context.Context, req request, out any) error {
 	if req.idempotencyKey != "" {
 		call.Header.Set("Idempotency-Key", req.idempotencyKey)
 	}
+	for name, value := range req.header {
+		call.Header.Set(name, value)
+	}
 	if c.Credential != "" {
 		call.Header.Set("Authorization", "Bearer "+c.Credential)
 	}
-	response, err := c.HTTP.Do(call)
-	if err != nil {
-		return errs.New(errs.StoreUnavailable, "the API did not answer")
-	}
-	defer response.Body.Close()
-	payload, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes))
-	if err != nil {
-		return errs.New(errs.StoreUnavailable, "the API answer could not be read")
-	}
-	return decodeResponse(response.StatusCode, payload, out)
+	return call, nil
 }
 
 // decodeResponse turns one answer into a decoded value or a catalog error. A

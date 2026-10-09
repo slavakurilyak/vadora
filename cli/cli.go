@@ -6,12 +6,14 @@
 package cli
 
 import (
-	"flag"
+	"bufio"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/vadora/vadora/api/types/errs"
 )
@@ -31,8 +33,8 @@ type Command struct {
 }
 
 // Env is what a command needs from its host: the streams to use, and the
-// configuration to read. A command never reads an environment variable itself,
-// so the CLI stays testable and never depends on ambient state.
+// configuration to read. A command reads an environment variable only through
+// Getenv, so the CLI stays testable and never depends on ambient state.
 type Env struct {
 	// Out receives human readable output.
 	Out io.Writer
@@ -46,6 +48,31 @@ type Env struct {
 	JSON bool
 	// Version is the client version reported by the version command.
 	Version string
+	// ConfigDir holds the credential, the spending policy, and the purchase journal.
+	// Empty means VADORA_CONFIG_DIR, then the user's configuration directory.
+	ConfigDir string
+	// HTTP replaces the SDK transport. A test points it at a local server.
+	HTTP *http.Client
+	// Getenv reads one setting from the environment. Nil reads none.
+	Getenv func(string) string
+	// Store replaces the credential store, which is a private file by default.
+	Store CredentialStore
+	// PollInterval is the pause between reads of an order that a command waits on.
+	PollInterval time.Duration
+	// WaitFor bounds how long a command waits for an order to be received.
+	WaitFor time.Duration
+
+	// secrets are the values that this run loaded and must never print.
+	secrets []string
+	reader  *bufio.Reader
+}
+
+// getenv reads one setting.
+func (e *Env) getenv(name string) string {
+	if e.Getenv == nil {
+		return ""
+	}
+	return e.Getenv(name)
 }
 
 // Tree is an ordered command tree. A command name is unique within the tree,
@@ -239,69 +266,92 @@ func (t *Tree) resolve(args []string) (string, []string) {
 	return "", args
 }
 
-// Main is the entry point both binaries share. It parses the global flags,
-// resolves the command, and turns a catalog error into one line of output plus
-// the action the client should take. A serve command that the public binary does
-// not register therefore reports serve as an unknown command, exactly as the
-// repository split requires.
+// Main is the entry point both binaries share. It builds the environment of the
+// process and runs the command line. A serve command that the public binary does not
+// register therefore reports serve as an unknown command, exactly as the repository
+// split requires.
 func Main(tree *Tree, args []string, out, errOut io.Writer, in io.Reader, version string) int {
-	if tree == nil {
-		fmt.Fprintf(errOut, "error: the command tree is missing\n")
-		return 1
-	}
-	if len(tree.Names()) == 0 {
-		fmt.Fprintf(errOut, "error: the command tree is empty\n")
-		return 1
-	}
-	if len(args) > MaxArguments {
-		fmt.Fprintf(errOut, "error: the command line is too long\n")
-		return 2
-	}
-	env := &Env{Out: out, Err: errOut, In: in, Version: version}
-	if env.Version == "" {
-		fmt.Fprintf(errOut, "error: the binary reports no version\n")
-		return 1
-	}
-	if out == nil {
-		fmt.Fprintf(errOut, "error: the command has no output stream\n")
-		return 1
-	}
-	global := flag.NewFlagSet("vadora", flag.ContinueOnError)
 	if errOut == nil {
 		errOut = os.Stderr
 	}
 	if out == nil {
 		out = os.Stdout
 	}
-	global.SetOutput(errOut)
-	apiBase := global.String("api", defaultAPIBase, "Vadora API origin")
-	global.BoolVar(&env.JSON, "json", false, "print structured JSON")
-	if err := global.Parse(args); err != nil {
-		return exitUnusable(errOut)
+	return Execute(tree, args, &Env{Out: out, Err: errOut, In: in, Version: version, Getenv: os.Getenv})
+}
+
+// Execute runs one command line in a prepared environment and returns the process
+// exit code. The global flags --api and --json may stand anywhere on the line. A
+// catalog error becomes one line with its code and reason and one line with the
+// single client action.
+func Execute(tree *Tree, args []string, env *Env) int {
+	if tree == nil {
+		fmt.Fprintf(env.Err, "error: the command tree is missing\n")
+		return 1
 	}
-	if global.NFlag() > MaxCommandFlags+2 {
-		return exitUnusable(errOut)
+	if len(tree.Names()) == 0 {
+		fmt.Fprintf(env.Err, "error: the command tree is missing\n")
+		return 1
 	}
-	env.APIBase = strings.TrimRight(*apiBase, "/")
-	if global.NArg() > len(args) {
-		return exitUnusable(errOut)
+	if len(args) > MaxArguments {
+		fmt.Fprintf(env.Err, "error: the command line is too long\n")
+		return 2
 	}
-	trimmedBase := strings.TrimSpace(*apiBase)
-	if trimmedBase == "" {
-		return exitUnusable(errOut)
+	if env.Version == "" {
+		fmt.Fprintf(env.Err, "error: the binary reports no version\n")
+		return 1
 	}
-	if !strings.HasPrefix(trimmedBase, "https://") {
-		if !strings.HasPrefix(trimmedBase, "http://127.0.0.1") {
-			if !strings.HasPrefix(trimmedBase, "http://localhost") {
-				fmt.Fprintf(errOut, "INVALID_REQUEST: the API origin must use https\n")
-				return 2
-			}
-		}
+	api, rest, err := extractGlobals(args, env)
+	if err != nil {
+		return report(env.Err, err)
 	}
-	if err := tree.Run(env, global.Args()); err != nil {
-		return report(errOut, err)
+	env.APIBase = strings.TrimRight(api, "/")
+	if err := checkOrigin(env.APIBase); err != nil {
+		return report(env.Err, err)
+	}
+	if err := tree.Run(env, rest); err != nil {
+		return report(env.Err, err)
 	}
 	return 0
+}
+
+// extractGlobals removes --api and --json from a command line and returns the API
+// origin and the remaining arguments.
+func extractGlobals(args []string, env *Env) (string, []string, error) {
+	api := defaultAPIBase
+	var rest []string
+	for index := 0; index < len(args); index++ {
+		argument := args[index]
+		switch {
+		case argument == "--json" || argument == "-json":
+			env.JSON = true
+		case argument == "--api" || argument == "-api":
+			if index+1 >= len(args) {
+				return "", nil, errs.New(errs.InvalidRequest, "--api needs an origin")
+			}
+			index++
+			api = args[index]
+		case strings.HasPrefix(argument, "--api="):
+			api = strings.TrimPrefix(argument, "--api=")
+		default:
+			rest = append(rest, argument)
+		}
+	}
+	return api, rest, nil
+}
+
+// checkOrigin accepts an https origin, or a plain http origin only on a loopback
+// address, so a credential never travels unencrypted to a remote host.
+func checkOrigin(origin string) error {
+	if strings.HasPrefix(origin, "https://") {
+		return nil
+	}
+	for _, local := range []string{"http://127.0.0.1", "http://localhost", "http://[::1]"} {
+		if strings.HasPrefix(origin, local) {
+			return nil
+		}
+	}
+	return errs.New(errs.InvalidRequest, "the API origin must use https")
 }
 
 // defaultAPIBase is the API origin the CLI uses when the caller names none. It
@@ -371,25 +421,6 @@ func exitCodeFor(err *errs.Error) int {
 	default:
 		return 1
 	}
-}
-
-// exitUnusable reports a command line the CLI cannot use at all.
-func exitUnusable(errOut io.Writer) int {
-	if errOut == nil {
-		errOut = os.Stderr
-	}
-	fmt.Fprintf(errOut, "error: the command line could not be parsed\n")
-	fmt.Fprintf(errOut, "next: run vadora help\n")
-	if errOut == nil {
-		panic("cli: an unusable command line report had no error stream")
-	}
-	if errOut == nil {
-		return 2
-	}
-	if errOut == nil {
-		return 2
-	}
-	return 2
 }
 
 // PrintError writes a catalog error and nothing else, for a command that has

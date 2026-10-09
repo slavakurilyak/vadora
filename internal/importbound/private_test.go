@@ -42,7 +42,9 @@ func TestThePublicModuleImportsNoPrivatePackage(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if imported == privateModule || strings.HasPrefix(imported, privateModule+"/") {
+			if imported == privateModule {
+				t.Errorf("%s imports the private package %s", path, imported)
+			} else if strings.HasPrefix(imported, privateModule+"/") {
 				t.Errorf("%s imports the private package %s", path, imported)
 			}
 		}

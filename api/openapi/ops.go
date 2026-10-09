@@ -154,7 +154,9 @@ func checkoutRoutes() []route {
 		Description: strings.Join([]string{
 			"Opens a private buyer session for the store of one listing and returns its token once. The",
 			"server fixes the network class from the store, so a test store settles on a test network.",
-			"Opening a session charges nothing and creates no order. A plugin sign in cannot open one.",
+			"Opening a session charges nothing and creates no order. A buyer credential holds one open",
+			"session per store, so a second call returns that session without a token. A plugin sign in",
+			"cannot open one.",
 		}, "\n"),
 		Tags: []string{"checkout"},
 		RequestBody: &RequestBody{Description: "The listing whose store the session is for.", Required: true,
@@ -162,6 +164,7 @@ func checkoutRoutes() []route {
 		Security: credentialOnly,
 		Responses: map[string]Response{
 			"201": jsonResponse("The session and its token, returned once.", refSchema("CheckoutSession")),
+			"200": jsonResponse("The open session of this credential for the store, returned again without a token.", refSchema("CheckoutSession")),
 			"400": errorResponse("The request could not be read."),
 			"401": errorResponse("No valid buyer credential was presented."),
 			"404": errorResponse("The listing is not published, or the store is not available to this buyer."),
@@ -348,34 +351,42 @@ func checkSchemas(spec *Specification) error {
 	return nil
 }
 
-// checkSchema walks one schema and every schema nested inside it.
+// checkSchema walks one schema and every schema nested inside it with an explicit
+// worklist, so a deeply nested schema cannot grow the stack.
 func checkSchema(name string, schema Schema, known map[string]Schema) error {
-	if schema.Ref != "" {
-		target := strings.TrimPrefix(schema.Ref, SchemaRefPrefix)
-		if target == schema.Ref {
-			return fmt.Errorf("the schema %s references %s outside the document", name, schema.Ref)
-		}
-		if _, declared := known[target]; !declared {
-			return fmt.Errorf("the schema %s references the unknown schema %s", name, target)
-		}
-		return nil
+	type pending struct {
+		name   string
+		schema Schema
 	}
-	if schema.Type == "" && len(schema.OneOf) == 0 {
-		return fmt.Errorf("the schema %s declares no type, reference, or choice", name)
-	}
-	for _, required := range schema.Required {
-		if _, declared := schema.Properties[required]; !declared {
-			return fmt.Errorf("the schema %s requires the undeclared field %s", name, required)
+	work := []pending{{name, schema}}
+	for len(work) > 0 {
+		current := work[len(work)-1]
+		work = work[:len(work)-1]
+		if current.schema.Ref != "" {
+			target := strings.TrimPrefix(current.schema.Ref, SchemaRefPrefix)
+			if target == current.schema.Ref {
+				return fmt.Errorf("the schema %s references %s outside the document", current.name, current.schema.Ref)
+			}
+			if _, declared := known[target]; !declared {
+				return fmt.Errorf("the schema %s references the unknown schema %s", current.name, target)
+			}
+			continue
 		}
-	}
-	if schema.Items != nil {
-		if err := checkSchema(name+".items", *schema.Items, known); err != nil {
-			return err
+		if current.schema.Type == "" {
+			if len(current.schema.OneOf) == 0 {
+				return fmt.Errorf("the schema %s declares no type, reference, or choice", current.name)
+			}
 		}
-	}
-	for field, property := range schema.Properties {
-		if err := checkSchema(name+"."+field, property, known); err != nil {
-			return err
+		for _, required := range current.schema.Required {
+			if _, declared := current.schema.Properties[required]; !declared {
+				return fmt.Errorf("the schema %s requires the undeclared field %s", current.name, required)
+			}
+		}
+		if current.schema.Items != nil {
+			work = append(work, pending{current.name + ".items", *current.schema.Items})
+		}
+		for field, property := range current.schema.Properties {
+			work = append(work, pending{current.name + "." + field, property})
 		}
 	}
 	return nil

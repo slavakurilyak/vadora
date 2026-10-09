@@ -24,13 +24,40 @@ func deriveSchema(sample any, description string, names map[reflect.Type]string)
 }
 
 // deriveType builds one schema. The top flag makes a registered struct expand in
-// place, because the component itself is being defined.
+// place, because the component itself is being defined. A list of lists unwraps
+// in a loop, and a struct field never holds an unregistered struct, so no step
+// needs recursion.
 func deriveType(kind reflect.Type, names map[reflect.Type]string, top bool) (Schema, error) {
+	depth := 0
 	for kind.Kind() == reflect.Pointer {
 		kind = kind.Elem()
 	}
+	for kind.Kind() == reflect.Slice {
+		depth++
+		kind = kind.Elem()
+		for kind.Kind() == reflect.Pointer {
+			kind = kind.Elem()
+		}
+	}
+	expand := false
+	if top {
+		expand = depth == 0
+	}
+	schema, err := deriveLeaf(kind, names, expand)
+	if err != nil {
+		return Schema{}, err
+	}
+	for ; depth > 0; depth-- {
+		item := schema
+		schema = Schema{Type: "array", Items: &item}
+	}
+	return schema, nil
+}
+
+// deriveLeaf builds the schema of a scalar, a map, or a struct.
+func deriveLeaf(kind reflect.Type, names map[reflect.Type]string, expand bool) (Schema, error) {
 	if name, registered := names[kind]; registered {
-		if !top {
+		if !expand {
 			return refSchema(name), nil
 		}
 	}
@@ -41,12 +68,6 @@ func deriveType(kind reflect.Type, names map[reflect.Type]string, top bool) (Sch
 		return Schema{Type: "boolean"}, nil
 	case reflect.Int, reflect.Int32, reflect.Int64, reflect.Uint32, reflect.Uint64:
 		return Schema{Type: "integer", Format: "int64"}, nil
-	case reflect.Slice:
-		item, err := deriveType(kind.Elem(), names, false)
-		if err != nil {
-			return Schema{}, err
-		}
-		return Schema{Type: "array", Items: &item}, nil
 	case reflect.Map:
 		if kind.Key().Kind() != reflect.String {
 			return Schema{}, fmt.Errorf("the map type %s has a key that is not a string", kind)
@@ -59,7 +80,9 @@ func deriveType(kind reflect.Type, names map[reflect.Type]string, top bool) (Sch
 }
 
 // deriveStruct builds an object schema. A field is required unless its JSON tag
-// says omitempty, and a field tagged "-" is not part of the contract.
+// says omitempty, and a field tagged "-" is not part of the contract. A struct
+// that is nested inside a field must be a registered document, which becomes a
+// reference, so the derivation never descends into an unregistered struct.
 func deriveStruct(kind reflect.Type, names map[reflect.Type]string) (Schema, error) {
 	schema := Schema{Type: "object", Properties: map[string]Schema{}}
 	for index := 0; index < kind.NumField(); index++ {
@@ -67,6 +90,9 @@ func deriveStruct(kind reflect.Type, names map[reflect.Type]string) (Schema, err
 		name, optional, skip := jsonName(field)
 		if skip {
 			continue
+		}
+		if err := requireRegistered(field.Type, names); err != nil {
+			return Schema{}, fmt.Errorf("%s.%s: %w", kind.Name(), field.Name, err)
 		}
 		property, err := deriveType(field.Type, names, false)
 		if err != nil {
@@ -81,6 +107,27 @@ func deriveStruct(kind reflect.Type, names map[reflect.Type]string) (Schema, err
 		return Schema{}, fmt.Errorf("the type %s declares no JSON field", kind)
 	}
 	return schema, nil
+}
+
+// requireRegistered refuses a struct field whose struct type is not a registered
+// document, because it would have to expand in place.
+func requireRegistered(kind reflect.Type, names map[reflect.Type]string) error {
+	for kind.Kind() == reflect.Pointer {
+		kind = kind.Elem()
+	}
+	for kind.Kind() == reflect.Slice {
+		kind = kind.Elem()
+		for kind.Kind() == reflect.Pointer {
+			kind = kind.Elem()
+		}
+	}
+	if kind.Kind() != reflect.Struct {
+		return nil
+	}
+	if _, registered := names[kind]; !registered {
+		return fmt.Errorf("the nested type %s is not a registered document", kind)
+	}
+	return nil
 }
 
 // jsonName reads a field's JSON name and whether it may be absent.
