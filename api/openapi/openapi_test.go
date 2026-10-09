@@ -33,12 +33,15 @@ func TestBuildProducesTheContract(t *testing.T) {
 // that the document does not declare, or a path there that is not here, means the
 // document and the specifications disagree.
 var implementedPaths = []string{
+	"/v1/auth/sign-in/codes",
+	"/v1/auth/sign-in",
 	"/v1/stores",
 	"/v1/products",
 	"/v1/products/{id}",
 	"/v1/checkout-sessions",
 	"/v1/checkout-sessions/{id}/shipping-options",
 	"/v1/quotes",
+	"/v1/quotes/{id}",
 	"/v1/quotes/{id}/purchase",
 	"/v1/orders",
 	"/v1/orders/{id}",
@@ -97,6 +100,7 @@ func TestBuyerOperationsRequireACredential(t *testing.T) {
 		"/v1/checkout-sessions",
 		"/v1/checkout-sessions/{id}/shipping-options",
 		"/v1/quotes",
+		"/v1/quotes/{id}",
 		"/v1/quotes/{id}/purchase",
 		"/v1/orders",
 		"/v1/orders/{id}",
@@ -139,9 +143,11 @@ func TestEveryStatusComesFromTheCatalog(t *testing.T) {
 	}
 }
 
-// A purchase never answers HTTP 402, because the challenge is an ordinary body and
-// one error shape covers every failure.
-func TestNoOperationDeclaresPaymentRequired(t *testing.T) {
+// HTTP 402 is the x402 challenge and nothing else: only the purchase declares it,
+// and it carries the challenge in the PAYMENT-REQUIRED header and the challenge
+// document as its body. Every other answer of every operation is a catalog error
+// (005:58, 001:344).
+func TestOnlyThePurchaseDeclaresHTTP402WithItsChallengeHeader(t *testing.T) {
 	t.Parallel()
 	spec, err := Build()
 	if err != nil {
@@ -149,12 +155,50 @@ func TestNoOperationDeclaresPaymentRequired(t *testing.T) {
 	}
 	for path, operations := range spec.Paths {
 		for method, operation := range operations {
-			for status := range operation.Responses {
-				if status == "402" {
-					t.Fatalf("the operation %s %s declares HTTP 402", method, path)
-				}
+			response, declares := operation.Responses["402"]
+			if !declares {
+				continue
+			}
+			if path != "/v1/quotes/{id}/purchase" || method != MethodPost {
+				t.Fatalf("the operation %s %s declares HTTP 402", method, path)
+			}
+			if _, named := response.Headers["PAYMENT-REQUIRED"]; !named {
+				t.Fatal("the 402 answer names no PAYMENT-REQUIRED header")
+			}
+			if response.Content["application/json"].Schema.Ref != SchemaRef("PaymentRequired") {
+				t.Fatal("the 402 answer does not carry the challenge document")
 			}
 		}
+	}
+	if _, declared := spec.Paths["/v1/quotes/{id}/purchase"][MethodPost].Responses["402"]; !declared {
+		t.Fatal("the purchase must declare its HTTP 402 challenge")
+	}
+}
+
+// The purchase takes its payment in the PAYMENT-SIGNATURE header, answers a settled
+// payment with PAYMENT-RESPONSE, and takes no request body, so a version 1 body
+// payload can never be mistaken for the payment.
+func TestThePurchaseUsesTheVersionTwoHeaders(t *testing.T) {
+	t.Parallel()
+	spec, err := Build()
+	if err != nil {
+		t.Fatalf("the document did not build: %v", err)
+	}
+	operation := spec.Paths["/v1/quotes/{id}/purchase"][MethodPost]
+	if operation.RequestBody != nil {
+		t.Fatal("the purchase declares a request body: the payment travels in PAYMENT-SIGNATURE")
+	}
+	var signature *Parameter
+	for index := range operation.Parameters {
+		if operation.Parameters[index].Name == "PAYMENT-SIGNATURE" {
+			signature = &operation.Parameters[index]
+		}
+	}
+	if signature == nil || signature.In != "header" || signature.Required {
+		t.Fatalf("PAYMENT-SIGNATURE is an optional header, got %+v", signature)
+	}
+	if _, named := operation.Responses["200"].Headers["PAYMENT-RESPONSE"]; !named {
+		t.Fatal("the 200 answer names no PAYMENT-RESPONSE header")
 	}
 }
 
@@ -183,7 +227,7 @@ func TestEveryFailureStatusHasACatalogCode(t *testing.T) {
 
 // isSuccessStatus reports whether a status answers the operation.
 func isSuccessStatus(status string) bool {
-	return status == "200" || status == "201"
+	return status == "200" || status == "201" || status == "202" || status == "402"
 }
 
 // carriesError reports whether one response body is the catalog error shape.
@@ -255,8 +299,10 @@ func TestEverySchemaIsReachable(t *testing.T) {
 			}
 		}
 	}
+	// Money is shared with the MCP tool schemas, which show a price in that shape.
+	sharedWithTools := map[string]bool{"Money": true}
 	for name := range spec.Components.Schemas {
-		if !reachable[name] {
+		if !reachable[name] && !sharedWithTools[name] {
 			t.Fatalf("the schema %s is declared but no operation returns it", name)
 		}
 	}
@@ -285,6 +331,9 @@ func collectReferences(schemas map[string]Schema, into map[string]bool) {
 
 // collectOneReference records one named schema reference, if it names one.
 func collectOneReference(schema Schema, into map[string]bool) {
+	for _, name := range schema.OneOf {
+		into[name] = true
+	}
 	if schema.Ref == "" {
 		return
 	}

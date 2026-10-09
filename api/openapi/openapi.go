@@ -11,10 +11,12 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
 	"github.com/vadora/vadora/api/types/errs"
+	"github.com/vadora/vadora/api/types/rest"
 )
 
 // APIVersion is the version prefix every implemented REST operation carries. The
@@ -108,10 +110,6 @@ type Schema struct {
 	OneOf                []string
 }
 
-// paymentChallengeSchemaShape exists so the payment challenge has a named type in
-// this package's own vocabulary, matching every other schema it declares.
-type paymentChallengeSchemaShape struct{}
-
 // Operation is one implemented HTTP operation.
 type Operation struct {
 	OperationID string
@@ -143,7 +141,9 @@ type RequestBody struct {
 // Response is one operation's response for one status.
 type Response struct {
 	Description string
-	Content     map[string]MediaType
+	// Headers maps a response header name to what it carries.
+	Headers map[string]string
+	Content map[string]MediaType
 }
 
 // MediaType is one content type of a request or response body.
@@ -166,7 +166,7 @@ func Build() (Specification, error) {
 				"authenticated with a buyer credential or a checkout page sign in on Vadora's own",
 				"domain. A plugin sign in is never accepted for a buyer call.",
 			}, "\n"),
-			Version: "0.1.0",
+			Version: "0.2.0",
 		},
 		Servers: []Server{
 			{URL: "https://api.vadora.xyz", Description: "The production API origin"},
@@ -174,6 +174,7 @@ func Build() (Specification, error) {
 		Paths:      map[string]map[string]Operation{},
 		Components: Components{Schemas: map[string]Schema{}, SecuritySchemes: map[string]SecurityScheme{}},
 		Tags: []Tag{
+			{Name: "auth", Description: "Email sign in for buyer credentials and account sessions"},
 			{Name: "discovery", Description: "Public catalog reads"},
 			{Name: "checkout", Description: "Buyer sessions, shipping, and quotes"},
 			{Name: "payments", Description: "Quote purchase and settlement"},
@@ -186,16 +187,10 @@ func Build() (Specification, error) {
 	if err := addSchemas(&spec); err != nil {
 		return Specification{}, err
 	}
-	if err := addDiscoveryOperations(&spec); err != nil {
+	if err := addOperations(&spec); err != nil {
 		return Specification{}, err
 	}
-	if err := addCheckoutOperations(&spec); err != nil {
-		return Specification{}, err
-	}
-	if err := addPaymentOperations(&spec); err != nil {
-		return Specification{}, err
-	}
-	if err := addOrderOperations(&spec); err != nil {
+	if err := checkRoutes(&spec); err != nil {
 		return Specification{}, err
 	}
 	if err := checkSpec(&spec); err != nil {
@@ -204,16 +199,18 @@ func Build() (Specification, error) {
 	return spec, nil
 }
 
-// addSecuritySchemes names the two ways a client proves who it is.
+// addSecuritySchemes names how a buyer proves who it is on the API origin. The
+// checkout page's cookie session lives on the checkout origin and is not part of
+// this document.
 func addSecuritySchemes(spec *Specification) error {
 	spec.Components.SecuritySchemes["buyerCredential"] = SecurityScheme{
 		Type:         "http",
 		Scheme:       "bearer",
 		BearerFormat: "Vadora buyer credential",
 		Description: strings.Join([]string{
-			"A revocable buyer credential the server stores only as a hash. It authenticates an",
-			"independent agent's buyer calls and is the only credential a plugin sign in cannot",
-			"replace.",
+			"A revocable buyer credential that the server stores only as a hash. It authenticates an",
+			"independent agent's buyer calls, and it is issued after an email sign in on Vadora's own",
+			"domain. A plugin sign in is never accepted for a buyer call.",
 		}, "\n"),
 	}
 	spec.Components.SecuritySchemes["checkoutSession"] = SecurityScheme{
@@ -221,7 +218,7 @@ func addSecuritySchemes(spec *Specification) error {
 		Scheme:       "bearer",
 		BearerFormat: "Vadora checkout session token",
 		Description: strings.Join([]string{
-			"The token a checkout session returns once. It binds the session's quotes and",
+			"The token that a checkout session returns once. It binds that session's quotes and",
 			"purchases, and another session's token reads nothing.",
 		}, "\n"),
 	}
@@ -232,7 +229,9 @@ func addSecuritySchemes(spec *Specification) error {
 	return nil
 }
 
-// addSchemas declares every schema the paths reference.
+// addSchemas declares every schema the paths reference. The request and response
+// documents are derived from the shared wire types, and the money and error
+// schemas come from the domain and the error catalog.
 func addSchemas(spec *Specification) error {
 	spec.Components.Schemas["Money"] = Schema{
 		Type: "object",
@@ -247,27 +246,42 @@ func addSchemas(spec *Specification) error {
 		Required: []string{"amount", "currency"},
 	}
 	spec.Components.Schemas["Error"] = errorSchema()
-	spec.Components.Schemas["Store"] = storeSchema()
-	spec.Components.Schemas["Product"] = productSchema()
-	spec.Components.Schemas["ProductPage"] = productPageSchema()
-	spec.Components.Schemas["StorePage"] = storePageSchema()
-	spec.Components.Schemas["CheckoutSession"] = checkoutSessionSchema()
-	spec.Components.Schemas["CreateCheckoutSessionRequest"] = createCheckoutSessionRequestSchema()
-	spec.Components.Schemas["ShippingOptionsRequest"] = shippingOptionsRequestSchema()
-	spec.Components.Schemas["ShippingOption"] = shippingOptionSchema()
-	spec.Components.Schemas["ShippingOptions"] = shippingOptionsSchema()
-	spec.Components.Schemas["QuoteRequest"] = quoteRequestSchema()
-	spec.Components.Schemas["Quote"] = quoteSchema()
-	spec.Components.Schemas["PurchaseRequest"] = purchaseRequestSchema()
-	spec.Components.Schemas["PaymentChallenge"] = paymentChallengeSchema()
-	spec.Components.Schemas["Receipt"] = receiptSchema()
-	spec.Components.Schemas["Order"] = orderSchema()
-	spec.Components.Schemas["DeliveryDetails"] = deliveryDetailsSchema()
-	spec.Components.Schemas["PurchaseMethod"] = purchaseMethodSchema()
-	if err := checkSchemas(spec); err != nil {
-		return err
+	spec.Components.Schemas["PaymentRequired"] = paymentRequiredSchema()
+	documents := rest.Documents()
+	names := make(map[reflect.Type]string, len(documents))
+	for _, document := range documents {
+		names[reflect.TypeOf(document.Sample)] = document.Name
 	}
-	return nil
+	for _, document := range documents {
+		schema, err := deriveSchema(document.Sample, document.Description, names)
+		if err != nil {
+			return fmt.Errorf("deriving the schema %s: %w", document.Name, err)
+		}
+		spec.Components.Schemas[document.Name] = schema
+	}
+	return checkSchemas(spec)
+}
+
+// paymentRequiredSchema describes the x402 version 2 challenge. The x402
+// specification owns its shape, so the document names the members that a client
+// reads and leaves the rest open.
+func paymentRequiredSchema() Schema {
+	return Schema{
+		Type: "object",
+		Description: strings.Join([]string{
+			"The x402 version 2 challenge of an unpaid quote, as the PAYMENT-REQUIRED header carries it",
+			"in base64. It lists exactly one option: USDC on the quote's Solana network, to the",
+			"merchant's payout address, with the quote ID as the memo and the facilitator as fee payer.",
+		}, "\n"),
+		Properties: map[string]Schema{
+			"x402Version": {Type: "integer", Description: "The protocol version, always 2."},
+			"accepts": {Type: "array", Description: "The payment options, each an object of the exact scheme.",
+				Items: &Schema{Type: "object", AdditionalProperties: true}},
+			"resource":   {Type: "object", AdditionalProperties: true, Description: "The purchase endpoint of the quote."},
+			"extensions": {Type: "object", AdditionalProperties: true, Description: "The protocol extensions, including the required payment identifier."},
+		},
+		Required: []string{"x402Version", "accepts"},
+	}
 }
 
 // SchemaRefPrefix is the pointer prefix every component reference carries, so a
@@ -383,696 +397,6 @@ func errorSchema() Schema {
 	}
 	return schema
 
-}
-
-// storeSchema describes one store in the public directory.
-func storeSchema() Schema {
-	if len(StoreSchemaName) == 0 {
-		panic("openapi: the store schema is named nothing")
-	}
-	schema := Schema{
-		Type:        "object",
-		Description: "A merchant store with at least one published listing.",
-		Properties: map[string]Schema{
-			"id":           {Type: "string", Description: "The stable store identifier."},
-			"name":         {Type: "string", Description: "The name a person reads."},
-			"categories":   {Type: "array", Description: "The store's categories.", Items: itemOf(stringSchemaRef())},
-			"destinations": {Type: "array", Description: "Approved destination country codes.", Items: itemOf(stringSchemaRef())},
-			"purchase_methods": {
-				Type:        "array",
-				Description: "The payment methods this store's listings offer.",
-				Items:       itemOf(refSchema(PaymentMethodName)),
-			},
-		},
-		Required: []string{"id", "name", "categories", "destinations", "purchase_methods"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: storeSchema declares no property")
-	}
-	if _, declared := schema.Properties["id"]; !declared {
-		panic("openapi: storeSchema declares no id property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: storeSchema requires no field")
-	}
-	return schema
-
-}
-
-// productSchema describes one published listing.
-func productSchema() Schema {
-	if len(ProductSchemaName) == 0 {
-		panic("openapi: the product schema is named nothing")
-	}
-	schema := Schema{
-		Type:        "object",
-		Description: "A published listing a buyer can quote.",
-		Properties: map[string]Schema{
-			"id":       {Type: "string", Description: "The stable listing identifier."},
-			"title":    {Type: "string", Description: "The listing title, imported from the store."},
-			"store_id": {Type: "string", Description: "The store that owns the listing."},
-			"price":    refSchema(MoneyName),
-			"variants": {
-				Type:        "array",
-				Description: "The purchasable variants of the listing.",
-				Items:       itemOf(variantSchema()),
-			},
-			"purchase_methods": {
-				Type:        "array",
-				Description: "The payment methods this listing offers.",
-				Items:       itemOf(refSchema(PaymentMethodName)),
-			},
-		},
-		Required: []string{"id", "title", "store_id", "price", "variants", "purchase_methods"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: productSchema declares no property")
-	}
-	if _, declared := schema.Properties["id"]; !declared {
-		panic("openapi: productSchema declares no id property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: productSchema requires no field")
-	}
-	return schema
-
-}
-
-// variantSchema describes one purchasable variant of a listing.
-func variantSchema() Schema {
-	if len(variantFields) == 0 {
-		panic("openapi: the variant schema declares no field")
-	}
-	schema := Schema{
-		Type:        "object",
-		Description: "One purchasable variant of a listing.",
-		Properties: map[string]Schema{
-			"id":    {Type: "string", Description: "The variant identifier."},
-			"title": {Type: "string", Description: "The variant title."},
-			"price": refSchema(MoneyName),
-		},
-		Required: []string{"id", "title", "price"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: variantSchema declares no property")
-	}
-	if _, declared := schema.Properties["id"]; !declared {
-		panic("openapi: variantSchema declares no id property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: variantSchema requires no field")
-	}
-	return schema
-
-}
-
-// purchaseMethodSchema describes one method a listing or store offers. A deferred
-// integration appears in the checkout information with its coming soon status and
-// never in the selectable set, so this schema carries the status for that reason.
-func purchaseMethodSchema() Schema {
-	statuses := catalogStatuses()
-	if len(statuses) == 0 {
-		panic("openapi: the purchase method schema enumerates no status")
-	}
-	statusValues := make([]string, 0, len(statuses))
-	for _, status := range statuses {
-		statusValues = append(statusValues, string(status))
-	}
-	schema := Schema{
-		Type:        "object",
-		Description: "One payment method a listing or store offers.",
-		Properties: map[string]Schema{
-			"protocol": {
-				Type:        "string",
-				Description: "The payment protocol, which is x402 for the launch scope.",
-			},
-			"network": {
-				Type:        "string",
-				Description: "The settlement network class, which is mainnet or testnet.",
-				Enum:        []string{"mainnet", "testnet"},
-			},
-			"asset": {
-				Type:        "string",
-				Description: "The settlement asset, which is USDC for the launch scope.",
-			},
-			"selectable": {
-				Type: "boolean",
-				Description: strings.Join([]string{
-					"Whether a client may select this method. A deferred integration is never",
-					"selectable, so a pointer or keyboard interaction initiates no payment.",
-				}, "\n"),
-			},
-			"status": {
-				Type:        "string",
-				Description: "The display status, which is coming_soon for a deferred method.",
-				Enum:        statusValues,
-			},
-		},
-		Required: []string{"protocol", "network", "asset", "selectable", "status"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: purchaseMethodSchema declares no property")
-	}
-	if _, declared := schema.Properties["protocol"]; !declared {
-		panic("openapi: purchaseMethodSchema declares no protocol property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: purchaseMethodSchema requires no field")
-	}
-	return schema
-
-}
-
-// productPageSchema describes one page of the public product catalog.
-func productPageSchema() Schema {
-	if ProductPageSchemaName == "" {
-		panic("openapi: the product page schema is named nothing")
-	}
-	schema := Schema{
-		Type:        "object",
-		Description: "One page of public listings.",
-		Properties: map[string]Schema{
-			"items": {
-				Type:        "array",
-				Description: "The listings on this page.",
-				Items:       itemOf(refSchema(ProductSchemaName)),
-			},
-			"next_cursor": {
-				Type:        "string",
-				Description: "The cursor for the next page, absent on the last page.",
-				Nullable:    true,
-			},
-		},
-		Required: []string{"items"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: productPageSchema declares no property")
-	}
-	if _, declared := schema.Properties["items"]; !declared {
-		panic("openapi: productPageSchema declares no items property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: productPageSchema requires no field")
-	}
-	return schema
-
-}
-
-// storePageSchema describes one page of the public store directory.
-func storePageSchema() Schema {
-	if StorePageSchemaName == "" {
-		panic("openapi: the store page schema is named nothing")
-	}
-	schema := Schema{
-		Type:        "object",
-		Description: "One page of the public merchant directory.",
-		Properties: map[string]Schema{
-			"items": {
-				Type:        "array",
-				Description: "The stores on this page.",
-				Items:       itemOf(refSchema(StoreSchemaName)),
-			},
-			"next_cursor": {
-				Type:        "string",
-				Description: "The cursor for the next page, absent on the last page.",
-				Nullable:    true,
-			},
-		},
-		Required: []string{"items"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: storePageSchema declares no property")
-	}
-	if _, declared := schema.Properties["items"]; !declared {
-		panic("openapi: storePageSchema declares no items property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: storePageSchema requires no field")
-	}
-	return schema
-
-}
-
-// checkoutSessionSchema describes a private buyer session. Its access token is
-// returned once, so the schema carries it on the create response only.
-func checkoutSessionSchema() Schema {
-	if len(CheckoutSessionSchemaName) == 0 {
-		panic("openapi: the checkout session schema is named nothing")
-	}
-	schema := Schema{
-		Type: "object",
-		Description: strings.Join([]string{
-			"A private buyer session. Creating one charges nothing and creates no paid order. The",
-			"access token is returned exactly once, in the create response.",
-		}, "\n"),
-		Properties: map[string]Schema{
-			"id":           {Type: "string", Description: "The stable session identifier."},
-			"access_token": {Type: "string", Description: "The session's bearer token, returned once."},
-			"expires_at": {
-				Type:        "string",
-				Format:      "date-time",
-				Description: "When the session stops authorizing requests.",
-			},
-		},
-		Required: []string{"id", "access_token", "expires_at"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: checkoutSessionSchema declares no property")
-	}
-	if _, declared := schema.Properties["id"]; !declared {
-		panic("openapi: checkoutSessionSchema declares no id property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: checkoutSessionSchema requires no field")
-	}
-	return schema
-
-}
-
-// createCheckoutSessionRequestSchema describes the create session body.
-func createCheckoutSessionRequestSchema() Schema {
-	if len(CreateSessionSchemaName) == 0 {
-		panic("openapi: the create session schema is named nothing")
-	}
-	schema := Schema{
-		Type: "object",
-		Description: strings.Join([]string{
-			"The body that creates a buyer session. It names nothing about the store, so a",
-			"session grants no access to a merchant's catalog beyond public discovery.",
-		}, "\n"),
-		Properties: map[string]Schema{
-			"agent_label": {
-				Type: "string",
-				Description: strings.Join([]string{
-					"A label the buyer agent names for itself, recorded so an operator can read",
-					"which client holds a session.",
-				}, "\n"),
-				MaxLength: bound(128),
-			},
-		}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: createCheckoutSessionRequestSchema declares no property")
-	}
-	if _, declared := schema.Properties["agent_label"]; !declared {
-		panic("openapi: createCheckoutSessionRequestSchema declares no agent_label property")
-	}
-	if len(schema.Properties) == 0 {
-		panic("openapi: createCheckoutSessionRequestSchema declares no property")
-	}
-	return schema
-
-}
-
-// shippingOptionsRequestSchema describes the shipping options body.
-func shippingOptionsRequestSchema() Schema {
-	if len(ShippingOptionsRequestName) == 0 {
-		panic("openapi: the shipping options request is named nothing")
-	}
-	schema := Schema{
-		Type: "object",
-		Description: strings.Join([]string{
-			"The destination to price shipping for. Listing the options writes nothing to the",
-			"merchant's store.",
-		}, "\n"),
-		Properties: map[string]Schema{
-			"delivery": refSchema(DeliveryDetailsName),
-		},
-		Required: []string{"delivery"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: shippingOptionsRequestSchema declares no property")
-	}
-	if _, declared := schema.Properties["delivery"]; !declared {
-		panic("openapi: shippingOptionsRequestSchema declares no delivery property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: shippingOptionsRequestSchema requires no field")
-	}
-	return schema
-
-}
-
-// shippingOptionSchema describes one shipping method and its total.
-func shippingOptionSchema() Schema {
-	if len(ShippingOptionName) == 0 {
-		panic("openapi: the shipping option schema is named nothing")
-	}
-	schema := Schema{
-		Type:        "object",
-		Description: "One shipping method and its authoritative total for a destination.",
-		Properties: map[string]Schema{
-			"id":          {Type: "string", Description: "The method identifier."},
-			"title":       {Type: "string", Description: "The method title a person reads."},
-			"description": {Type: "string", Description: "The method's delivery description."},
-			"total":       refSchema(MoneyName),
-		},
-		Required: []string{"id", "title", "total"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: shippingOptionSchema declares no property")
-	}
-	if _, declared := schema.Properties["id"]; !declared {
-		panic("openapi: shippingOptionSchema declares no id property")
-	}
-	if len(schema.Properties) == 0 {
-		panic("openapi: shippingOptionSchema declares no property")
-	}
-	return schema
-
-}
-
-// shippingOptionsSchema describes the shipping options response.
-func shippingOptionsSchema() Schema {
-	if len(ShippingOptionsName) == 0 {
-		panic("openapi: the shipping options schema is named nothing")
-	}
-	schema := Schema{
-		Type:        "object",
-		Description: "The shipping methods a connector offers for one destination.",
-		Properties: map[string]Schema{
-			"items": {
-				Type:        "array",
-				Description: "The available methods.",
-				Items:       itemOf(refSchema(ShippingOptionName)),
-			},
-		},
-		Required: []string{"items"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: shippingOptionsSchema declares no property")
-	}
-	if _, declared := schema.Properties["items"]; !declared {
-		panic("openapi: shippingOptionsSchema declares no items property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: shippingOptionsSchema requires no field")
-	}
-	return schema
-
-}
-
-// quoteRequestSchema describes the quote body.
-func quoteRequestSchema() Schema {
-	if len(QuoteRequestName) == 0 {
-		panic("openapi: the quote request schema is named nothing")
-	}
-	schema := Schema{
-		Type: "object",
-		Description: strings.Join([]string{
-			"The body that creates a quote. The price is calculated on the server, so a buyer",
-			"never sends an amount and a tampered one changes nothing.",
-		}, "\n"),
-		Properties: map[string]Schema{
-			"listing_id":      {Type: "string", Description: "The listing to quote.", MaxLength: bound(64)},
-			"variant_id":      {Type: "string", Description: "The variant to quote.", MaxLength: bound(64)},
-			"quantity":        {Type: "integer", Description: "How many, from one to the configured maximum.", Minimum: bound(1)},
-			"delivery":        refSchema(DeliveryDetailsName),
-			"shipping_option": {Type: "string", Description: "The chosen shipping method.", MaxLength: bound(64)},
-		},
-		Required: []string{"listing_id", "quantity", "delivery"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: quoteRequestSchema declares no property")
-	}
-	if _, declared := schema.Properties["listing_id"]; !declared {
-		panic("openapi: quoteRequestSchema declares no listing_id property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: quoteRequestSchema requires no field")
-	}
-	return schema
-
-}
-
-// quoteSchema describes one issued quote.
-func quoteSchema() Schema {
-	if len(QuoteName) == 0 {
-		panic("openapi: the quote schema is named nothing")
-	}
-	schema := Schema{
-		Type: "object",
-		Description: strings.Join([]string{
-			"An issued quote. It is bound to one buyer session and one merchant, and every offered",
-			"chain is bound to one recipient, one network, and one asset.",
-		}, "\n"),
-		Properties: map[string]Schema{
-			"id":                   {Type: "string", Description: "The stable quote identifier."},
-			"listing_id":           {Type: "string", Description: "The quoted listing."},
-			"quantity":             {Type: "integer", Description: "The quoted quantity."},
-			"total":                refSchema(MoneyName),
-			"shipping":             refSchema(MoneyName),
-			"shipping_description": {Type: "string", Description: "The chosen method's description."},
-			"expires_at":           {Type: "string", Format: "date-time", Description: "When the quote expires."},
-			"payment_methods": {
-				Type:        "array",
-				Description: "The methods this quote offers, in protocol rank order.",
-				Items:       itemOf(refSchema(PaymentMethodName)),
-			},
-			"policies": policySchema(),
-		},
-		Required: []string{"id", "listing_id", "quantity", "total", "expires_at", "payment_methods"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: quoteSchema declares no property")
-	}
-	if _, declared := schema.Properties["id"]; !declared {
-		panic("openapi: quoteSchema declares no id property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: quoteSchema requires no field")
-	}
-	return schema
-
-}
-
-// policySchema describes the merchant's policies a quote returns.
-func policySchema() Schema {
-	if len(policyFields) == 0 {
-		panic("openapi: the policy schema declares no field")
-	}
-	schema := Schema{
-		Type:        "object",
-		Description: "The merchant's policies the quote carries.",
-		Properties: map[string]Schema{
-			"return_policy":  {Type: "string", Description: "The store's return policy text."},
-			"privacy_policy": {Type: "string", Description: "The store's privacy policy text."},
-		}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: policySchema declares no property")
-	}
-	if _, declared := schema.Properties["return_policy"]; !declared {
-		panic("openapi: policySchema declares no return_policy property")
-	}
-	if len(schema.Properties) == 0 {
-		panic("openapi: policySchema declares no property")
-	}
-	return schema
-
-}
-
-// purchaseRequestSchema describes the purchase body.
-func purchaseRequestSchema() Schema {
-	if len(PurchaseRequestName) == 0 {
-		panic("openapi: the purchase request schema is named nothing")
-	}
-	schema := Schema{
-		Type: "object",
-		Description: strings.Join([]string{
-			"The body that submits a purchase. Without a payment payload the operation returns the",
-			"standard challenge of every protocol the quote offers, in registry rank order.",
-		}, "\n"),
-		Properties: map[string]Schema{
-			"payment": {
-				Nullable: true,
-				Description: strings.Join([]string{
-					"The signed payment authorization. Its absence asks for a challenge rather than",
-					"submitting a payment.",
-				}, "\n"),
-				OneOf: []string{"PaymentAuthorization"},
-			},
-		}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: purchaseRequestSchema declares no property")
-	}
-	if _, declared := schema.Properties["payment"]; !declared {
-		panic("openapi: purchaseRequestSchema declares no payment property")
-	}
-	if len(schema.Properties) == 0 {
-		panic("openapi: purchaseRequestSchema declares no property")
-	}
-	return schema
-
-}
-
-// paymentChallengeSchema describes the challenge a quote returns before payment.
-func paymentChallengeSchema() Schema {
-	if len(PaymentChallengeName) == 0 {
-		panic("openapi: the payment challenge schema is named nothing")
-	}
-	schema := Schema{
-		Type: "object",
-		Description: strings.Join([]string{
-			"The standard challenge of every payment protocol the quote offers, in protocol rank",
-			"order. The pilot adds no Vadora commission, so no fee is challenged.",
-		}, "\n"),
-		Properties: map[string]Schema{
-			"quote_id": {Type: "string", Description: "The quote this challenge belongs to."},
-			"schemes": {
-				Type:        "array",
-				Description: "One challenge per offered protocol, in rank order.",
-				Items:       itemOf(refSchema(PaymentChallengeName)),
-			},
-		},
-		Required: []string{"quote_id", "schemes"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: paymentChallengeSchema declares no property")
-	}
-	if _, declared := schema.Properties["quote_id"]; !declared {
-		panic("openapi: paymentChallengeSchema declares no quote_id property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: paymentChallengeSchema requires no field")
-	}
-	return schema
-
-}
-
-// receiptSchema describes a persisted receipt. A receipt is written before the
-// source order is updated, so a restart after settlement still shows it.
-func receiptSchema() Schema {
-	if len(ReceiptName) == 0 {
-		panic("openapi: the receipt schema is named nothing")
-	}
-	schema := Schema{
-		Type: "object",
-		Description: strings.Join([]string{
-			"A persisted receipt. Vadora writes it before it updates the source order, so a",
-			"payment that settled is never lost to a failed store update.",
-		}, "\n"),
-		Properties: map[string]Schema{
-			"id":       {Type: "string", Description: "The stable receipt identifier."},
-			"quote_id": {Type: "string", Description: "The quote this receipt settles."},
-			"amount":   refSchema(MoneyName),
-			"network":  {Type: "string", Description: "The confirmed settlement network."},
-			"transaction_signature": {
-				Type:        "string",
-				Description: "The chain transaction reference Vadora's own RPC confirmed.",
-			},
-			"confirmed_at": {
-				Type:        "string",
-				Format:      "date-time",
-				Description: "When Vadora's own RPC confirmed the transfer.",
-			},
-		},
-		Required: []string{"id", "quote_id", "amount", "network", "transaction_signature", "confirmed_at"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: receiptSchema declares no property")
-	}
-	if _, declared := schema.Properties["id"]; !declared {
-		panic("openapi: receiptSchema declares no id property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: receiptSchema requires no field")
-	}
-	return schema
-
-}
-
-// orderSchema describes a buyer's own order.
-func orderSchema() Schema {
-	if len(OrderName) == 0 {
-		panic("openapi: the order schema is named nothing")
-	}
-	schema := Schema{
-		Type: "object",
-		Description: strings.Join([]string{
-			"One order. Payment becomes paid only after settlement is confirmed, and fulfillment",
-			"becomes received only after the merchant's platform acknowledges the order.",
-		}, "\n"),
-		Properties: map[string]Schema{
-			"id":         {Type: "string", Description: "The stable order identifier."},
-			"listing_id": {Type: "string", Description: "The ordered listing."},
-			"quantity":   {Type: "integer", Description: "The ordered quantity."},
-			"total":      refSchema(MoneyName),
-			"payment_status": {
-				Type:        "string",
-				Description: "The payment state, which is unpaid, pending, paid, or refunded.",
-				Enum:        []string{"unpaid", "pending", "paid", "refunded"},
-			},
-			"fulfillment_status": {
-				Type:        "string",
-				Description: "The fulfillment state, from sync_pending to received.",
-				Enum:        []string{"sync_pending", "received", "cancelled"},
-			},
-			"receipt": {
-				Ref:         "#/components/schemas/Receipt",
-				Description: "The persisted receipt, once one exists.",
-				Nullable:    true,
-			},
-			"merchant_order_reference": {
-				Type:        "string",
-				Description: "The merchant's order reference, once the platform supplies one.",
-				Nullable:    true,
-			},
-		},
-		Required: []string{"id", "listing_id", "quantity", "total", "payment_status", "fulfillment_status"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: orderSchema declares no property")
-	}
-	if _, declared := schema.Properties["id"]; !declared {
-		panic("openapi: orderSchema declares no id property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: orderSchema requires no field")
-	}
-	return schema
-
-}
-
-// deliveryDetailsSchema describes the bounded delivery fields a quote requires.
-func deliveryDetailsSchema() Schema {
-	if len(deliveryFields) == 0 {
-		panic("openapi: the delivery schema declares no field")
-	}
-	schema := Schema{
-		Type: "object",
-		Description: strings.Join([]string{
-			"The delivery fields an order keeps. They arrive from an untrusted client, so every",
-			"field is bounded and they are stored apart from public catalog data.",
-		}, "\n"),
-		Properties: map[string]Schema{
-			"name":         {Type: "string", Description: "The recipient's name.", MaxLength: bound(200)},
-			"street_lines": {Type: "array", Description: "The street address lines.", Items: itemOf(stringSchemaRef()), MaxItems: bound(5)},
-			"city":         {Type: "string", Description: "The city.", MaxLength: bound(200)},
-			"region":       {Type: "string", Description: "The region, state, or province.", MaxLength: bound(200)},
-			"postal_code":  {Type: "string", Description: "The postal code.", MaxLength: bound(200)},
-			"country":      {Type: "string", Description: "The uppercase ISO 3166-1 alpha-2 country code.", MinLength: bound(2), MaxLength: bound(2)},
-			"phone":        {Type: "string", Description: "The recipient's phone number.", MaxLength: bound(200)},
-		},
-		Required: []string{"name", "street_lines", "city", "country"}}
-
-	if len(schema.Properties) == 0 {
-		panic("openapi: deliveryDetailsSchema declares no property")
-	}
-	if _, declared := schema.Properties["name"]; !declared {
-		panic("openapi: deliveryDetailsSchema declares no name property")
-	}
-	if len(schema.Required) == 0 {
-		panic("openapi: deliveryDetailsSchema requires no field")
-	}
-	return schema
-
-}
-
-// stringSchemaRef returns the schema for a plain string.
-func stringSchemaRef() Schema {
-	return Schema{Type: "string"}
 }
 
 // The names below are the schema names this package declares and references. They
@@ -1229,8 +553,15 @@ type requestBodyShape struct {
 
 // responseShape is one operation's response for one status.
 type responseShape struct {
-	Description string                `json:"description"`
-	Content     map[string]mediaShape `json:"content"`
+	Description string                 `json:"description"`
+	Headers     map[string]headerShape `json:"headers,omitempty"`
+	Content     map[string]mediaShape  `json:"content"`
+}
+
+// headerShape is one response header, under its published field names.
+type headerShape struct {
+	Description string      `json:"description"`
+	Schema      schemaShape `json:"schema"`
 }
 
 // mediaShape is one content type of a request or response body.
@@ -1257,7 +588,7 @@ type schemaShape struct {
 	MaxLength            *int64                 `json:"maxLength,omitempty"`
 	MaxItems             *int64                 `json:"maxItems,omitempty"`
 	AdditionalProperties bool                   `json:"additionalProperties,omitempty"`
-	OneOf                []string               `json:"oneOf,omitempty"`
+	OneOf                []schemaShape          `json:"oneOf,omitempty"`
 }
 
 // orderedComponents is the components section with sorted keys.
@@ -1459,8 +790,33 @@ func buildResponseShapes(responses map[string]Response) map[string]responseShape
 		}
 		shapes[status] = responseShape{
 			Description: response.Description,
+			Headers:     buildHeaderShapes(response.Headers),
 			Content:     buildContentShapes(response.Content),
 		}
+	}
+	return shapes
+}
+
+// oneOfShapes returns a choice between named schemas as references.
+func oneOfShapes(names []string) []schemaShape {
+	if len(names) == 0 {
+		return nil
+	}
+	shapes := make([]schemaShape, 0, len(names))
+	for _, name := range names {
+		shapes = append(shapes, schemaShape{Ref: SchemaRefPrefix + name})
+	}
+	return shapes
+}
+
+// buildHeaderShapes returns the response headers of one status in their published form.
+func buildHeaderShapes(headers map[string]string) map[string]headerShape {
+	if len(headers) == 0 {
+		return nil
+	}
+	shapes := make(map[string]headerShape, len(headers))
+	for name, description := range headers {
+		shapes[name] = headerShape{Description: description, Schema: schemaShape{Type: "string"}}
 	}
 	return shapes
 }
@@ -1508,7 +864,7 @@ func buildSchemaShape(schema Schema) schemaShape {
 		MaxLength:            schema.MaxLength,
 		MaxItems:             schema.MaxItems,
 		AdditionalProperties: schema.AdditionalProperties,
-		OneOf:                schema.OneOf,
+		OneOf:                oneOfShapes(schema.OneOf),
 	}
 	shape.Properties = buildPropertyShapes(schema.Properties)
 	return shape
@@ -1555,9 +911,6 @@ func buildComponentShapes(components Components) orderedComponents {
 	}
 	if len(components.SecuritySchemes) == 0 {
 		panic("openapi: the document declares no security scheme")
-	}
-	if len(components.Schemas) != len(declaredSchemas) {
-		panic("openapi: the declared schemas and the built schemas disagree")
 	}
 	schemas := make(map[string]schemaShape, len(components.Schemas))
 	for name, schema := range components.Schemas {

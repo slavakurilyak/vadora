@@ -19,6 +19,52 @@ const (
 	HeaderIdempotencyKey = "Idempotency-Key"
 )
 
+// SignInCodeRequest asks Vadora to email a one time sign in code. A buyer request
+// asks for a buyer credential, and any other request asks for an account session.
+// The code is accepted only for the request that sent it (001:64).
+type SignInCodeRequest struct {
+	Email string `json:"email"`
+	Buyer bool   `json:"buyer,omitempty"`
+}
+
+// SignInCode answers a code request. It carries no code: the code travels only by
+// email, and the request ID binds the completion to this request.
+type SignInCode struct {
+	RequestID string `json:"request_id"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+// SignInRequest completes a sign in with the emailed code.
+type SignInRequest struct {
+	RequestID string `json:"request_id"`
+	Email     string `json:"email"`
+	Code      string `json:"code"`
+	Buyer     bool   `json:"buyer,omitempty"`
+}
+
+// BuyerCredential is a freshly issued buyer credential. The server shows the secret
+// once and stores only its hash (001:74).
+type BuyerCredential struct {
+	Credential string `json:"credential"`
+	ID         string `json:"id"`
+	ExpiresAt  string `json:"expires_at"`
+}
+
+// Account is the signed in account as a sign in reports it.
+type Account struct {
+	ID               string `json:"id"`
+	Email            string `json:"email"`
+	AccountMode      string `json:"account_mode"`
+	PreferredCountry string `json:"preferred_country"`
+}
+
+// SessionSignIn is the answer of an account sign in. The session itself travels in
+// a secure, HTTP only cookie, and the token guards every later state change.
+type SessionSignIn struct {
+	Account   Account `json:"account"`
+	CSRFToken string  `json:"csrf_token"`
+}
+
 // CreateCheckoutSessionRequest opens a private buyer session for the store of one
 // listing. The server fixes the network class from the store, never from the
 // request (001:516).
