@@ -1,0 +1,5 @@
+# Style checker state.
+.stylex/
+# Local binary and UI dependencies.
+/vadora
+node_modules/

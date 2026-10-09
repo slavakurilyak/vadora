@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "vadora",
+  "version": "0.1.0",
+  "description": "Discover physical products and open Vadora's USDC checkout or merchant workspace.",
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/setup/SKILL.md",
+      "interface": {"displayName": "Vadora", "shortDescription": "Connecting merchants to crypto agents."}
+    }
+  }
+}

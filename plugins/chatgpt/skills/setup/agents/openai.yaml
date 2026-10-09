@@ -1,0 +1,6 @@
+interface:
+  display_name: "Set up Vadora"
+  short_description: "Start shopping or connect an invited Shopify store."
+  default_prompt: "Help me get started with Vadora."
+policy:
+  allow_implicit_invocation: true
