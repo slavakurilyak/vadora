@@ -125,13 +125,13 @@ func (n NetworkClass) Valid() bool {
 // merchant, and redacted a configured period after the order reaches a final
 // state.
 type DeliveryDetails struct {
-	Name        string
-	StreetLines []string
-	City        string
-	Region      string
-	PostalCode  string
-	Country     string
-	Phone       string
+	Name        string   `json:"name"`
+	StreetLines []string `json:"street_lines"`
+	City        string   `json:"city"`
+	Region      string   `json:"region,omitempty"`
+	PostalCode  string   `json:"postal_code,omitempty"`
+	Country     string   `json:"country"`
+	Phone       string   `json:"phone,omitempty"`
 }
 
 // MaxStreetLines bounds an address that arrives from an untrusted client.
