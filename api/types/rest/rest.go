@@ -157,19 +157,22 @@ type Quote struct {
 
 // Receipt is the durable proof that a confirmed payment belongs to an order.
 type Receipt struct {
-	ID                string `json:"id"`
-	OrderID           string `json:"order_id"`
-	Network           string `json:"network"`
-	Asset             string `json:"asset"`
-	Payer             string `json:"payer"`
-	Transaction       string `json:"transaction"`
-	Slot              uint64 `json:"slot"`
-	Confirmation      string `json:"confirmation"`
-	Protocol          string `json:"protocol"`
-	Seller            string `json:"seller"`
-	NetworkClass      string `json:"network_class"`
-	ExchangeRate      string `json:"exchange_rate,omitempty"`
-	AmountBaseUnits   int64  `json:"amount_base_units"`
+	ID              string `json:"id"`
+	OrderID         string `json:"order_id"`
+	Network         string `json:"network"`
+	Asset           string `json:"asset"`
+	Payer           string `json:"payer"`
+	Transaction     string `json:"transaction"`
+	Slot            uint64 `json:"slot"`
+	Confirmation    string `json:"confirmation"`
+	Protocol        string `json:"protocol"`
+	Seller          string `json:"seller"`
+	NetworkClass    string `json:"network_class"`
+	ExchangeRate    string `json:"exchange_rate,omitempty"`
+	AmountBaseUnits int64  `json:"amount_base_units"`
+	// RefundedBaseUnits is the amount that confirmed transfers refunded to the original
+	// payer, shown once the order is refunded.
+	RefundedBaseUnits int64  `json:"refunded_base_units,omitempty"`
 	FulfillmentStatus string `json:"fulfillment_status"`
 	CreatedAt         string `json:"created_at"`
 }
