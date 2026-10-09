@@ -82,15 +82,22 @@ function renderCart():void {
  },view.checkout_enabled!==true));
  root.append(action("Refresh order status",refresh));
 }
+function renderSearch():void {
+ const form=document.createElement("form");const query=document.createElement("input");query.placeholder="Search physical products";query.maxLength=128;query.setAttribute("aria-label","Search products");
+ form.append(query,action("Search",async()=>{view=await call("search_products",{query:query.value,limit:20});render();}));form.addEventListener("submit",e=>e.preventDefault());root.append(form);
+}
+function renderStores():void {
+ for(const store of view.stores??[])root.append(action(store.name,async()=>{view=await call("search_products",{store_id:store.id,limit:20});render();}));
+}
 function render():void {
  root.replaceChildren(text("h1","Vadora"));
  const toolbar=text("nav","");toolbar.append(action("Shop",async()=>{openedCart=false;await refresh();}),action("Cart",async()=>{openedCart=true;await refresh();}),action("Sell",async()=>{await open("https://app.vadora.xyz","https://app.vadora.xyz");}));root.append(toolbar);
  if(app.getHostContext()?.availableDisplayModes?.includes("fullscreen"))toolbar.append(action("Expand",async()=>{await app.requestDisplayMode({mode:"fullscreen"});}));
  if(openedCart) {renderCart();return;}
  if(view.settings?.mode==="sell") {root.append(text("h2","Merchant workspace"),text("p","Connect your invited Shopify store and confirm publication in the hosted workspace."));return;}
- const form=document.createElement("form");const query=document.createElement("input");query.placeholder="Search physical products";query.maxLength=128;query.setAttribute("aria-label","Search products");form.append(query,action("Search",async()=>{view=await call("search_products",{query:query.value,limit:20});render();}));form.addEventListener("submit",e=>e.preventDefault());root.append(form);
+ renderSearch();
  renderProducts(view.products??(view.product?[view.product]:[]));
- for(const store of view.stores??[])root.append(action(store.name,async()=>{view=await call("search_products",{store_id:store.id,limit:20});render();}));
+ renderStores();
  root.append(text("p","Shopify · x402 · Solana USDC · ChatGPT"),text("p","Coming soon: Base, Ethereum, MPP, UCP, ACP, WooCommerce, Claude Code"));
 }
 async function navigate(raw:string):Promise<void> {

@@ -48,8 +48,8 @@ func runProductsSearch(env *Env, args []string) error {
 	}
 	var human strings.Builder
 	for _, product := range results.Products {
-		fmt.Fprintf(&human, "%s  %s  %s %s  %s  %s\n", product.ID, product.Title, product.Price, product.Currency,
-			product.StoreName, availability(product))
+		fmt.Fprintf(&human, "%s  %s  %s %s  %s  %s%s\n", product.ID, product.Title, product.Price, product.Currency,
+			product.StoreName, availability(product), testLabel(product.Test))
 	}
 	if len(results.Products) == 0 {
 		human.WriteString("No listing matches.\n")
@@ -58,6 +58,15 @@ func runProductsSearch(env *Env, args []string) error {
 		fmt.Fprintf(&human, "More results: add --cursor %s\n", results.Next)
 	}
 	return render(env, human.String(), results)
+}
+
+// testLabel marks a listing or a store of a labeled development fixture, so a person
+// never mistakes a test for a real sale (001:516).
+func testLabel(test bool) string {
+	if test {
+		return "  [TEST]"
+	}
+	return ""
 }
 
 func availability(product rest.Product) string {
@@ -93,7 +102,7 @@ func runProductsGet(env *Env, args []string) error {
 // printed as text and never interpreted (001:496).
 func describeProduct(product rest.Product) string {
 	var human strings.Builder
-	fmt.Fprintf(&human, "%s\n", product.Title)
+	fmt.Fprintf(&human, "%s%s\n", product.Title, testLabel(product.Test))
 	fmt.Fprintf(&human, "  Listing     %s\n", product.ID)
 	fmt.Fprintf(&human, "  Merchant    %s (%s)\n", product.StoreName, product.StoreDomain)
 	fmt.Fprintf(&human, "  Price       %s %s", product.Price, product.Currency)
@@ -127,8 +136,8 @@ func runStoresList(env *Env, args []string) error {
 	}
 	var human strings.Builder
 	for _, store := range stores.Stores {
-		fmt.Fprintf(&human, "%s  %s  %s  %d listings  ships to %s\n", store.ID, store.Name, store.Domain, store.Listings,
-			strings.Join(store.Destinations, ", "))
+		fmt.Fprintf(&human, "%s  %s  %s  %d listings  ships to %s%s\n", store.ID, store.Name, store.Domain, store.Listings,
+			strings.Join(store.Destinations, ", "), testLabel(store.Test))
 	}
 	if len(stores.Stores) == 0 {
 		human.WriteString("No store has published a listing yet.\n")

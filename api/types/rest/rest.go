@@ -224,6 +224,9 @@ type Product struct {
 	Available       bool              `json:"available"`
 	SourceURL       string            `json:"source_url"`
 	PurchaseMethods []string          `json:"purchase_methods"`
+	// Test marks a listing of a labeled development store, so a client labels it as
+	// a test wherever it shows it.
+	Test bool `json:"test,omitempty"`
 }
 
 // ProductPage is one page of published products.
@@ -241,6 +244,8 @@ type Store struct {
 	Categories      []string `json:"categories"`
 	PurchaseMethods []string `json:"purchase_methods"`
 	Listings        int      `json:"published_listings"`
+	// Test marks a labeled development store.
+	Test bool `json:"test,omitempty"`
 }
 
 // StorePage is one page of the merchant directory.
