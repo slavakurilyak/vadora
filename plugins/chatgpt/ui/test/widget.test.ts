@@ -262,13 +262,15 @@ test("a server error that names the workspace opens the workspace and nothing el
 
 test("a host that opens links itself gets the link through its own call and the widget never opens a second one",async()=>{
  const host=new SimHost();host.server={start_checkout:()=>result({url:checkout})};
- const legacy:string[]=[];
+ const legacy:unknown[]=[];
  const extensions=new SimExtensions();
- const page=new SimPage();page.window.openai={openExternal:args=>{legacy.push(args.href);}};
+ const page=new SimPage();page.window.openai={openExternal:args=>{legacy.push(args);}};
  mount(host,extensions,page.asPage());await settle();
  host.deliver({cart:cartOf(2),product:kettle,checkout_enabled:true});await settle();
  await click(one(page.root.buttons("Pay with USDC")));
- assert.deepEqual(legacy,[checkout]);
+ // The call names the link and nothing else. ChatGPT then appends redirectUrl for an approved redirect domain, and the checkout page
+ // reads it as the way back to the conversation, so a call that turns the return address off would end the journey on the receipt (011:28).
+ assert.deepEqual(legacy,[{href:checkout}]);
  assert.deepEqual(host.opened,[]);
 });
 
