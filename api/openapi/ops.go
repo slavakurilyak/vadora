@@ -320,6 +320,7 @@ func orderRoutes() []route {
 			"200": jsonResponse("The order.", refSchema("Order")),
 			"401": errorResponse("No valid credential was presented."),
 			"404": errorResponse("The order belongs to another buyer, or does not exist."),
+			"429": errorResponse("Too many order reads for this account, credential, or address in the last hour. Retry after the interval that the answer gives."),
 		},
 	}
 	return []route{{"/v1/orders", MethodGet, list}, {"/v1/orders/{id}", MethodGet, get}}

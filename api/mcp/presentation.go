@@ -22,6 +22,10 @@ type Presentation interface {
 	Resources() []Resource
 	Icons(string) []Icon
 	Capabilities() map[string]any
+	// HostSession reads the host's own identifier of the conversation from the request
+	// metadata of a tool call, and answers an empty text when the host supplies none. The
+	// server bounds anonymous catalog calls with it and never identifies anyone by it.
+	HostSession(map[string]any) string
 }
 
 // ExtensionTools are presentation tools that call the existing services.
