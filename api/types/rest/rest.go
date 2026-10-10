@@ -261,13 +261,15 @@ type StorePage struct {
 // never reports an authorization: it comes from bounded public requests to the store's own
 // origin.
 type PlatformDetection struct {
-	// Platform is shopify or unsupported. A store that does not answer is unsupported with
-	// the status unreachable.
+	// Platform is shopify, a named deferred platform (woocommerce, bigcommerce, magento, or
+	// wix), or unsupported. A store that does not answer is unsupported with the status
+	// unreachable.
 	Platform       string `json:"platform"`
 	PlatformDomain string `json:"platform_domain,omitempty"`
 	// CanonicalDomain is the host of the URL that was checked.
 	CanonicalDomain string `json:"canonical_domain"`
-	// Status is shopify, unsupported, unreachable, or store_closed.
+	// Status is shopify, coming_soon for a named deferred platform, unsupported, unreachable,
+	// or store_closed.
 	Status      string   `json:"status"`
 	Limitations []string `json:"limitations"`
 	Evidence    []string `json:"evidence"`

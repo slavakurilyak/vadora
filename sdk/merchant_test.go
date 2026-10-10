@@ -83,6 +83,9 @@ func TestMerchantCallsCarryTheSessionTokenToTheContractRoutes(t *testing.T) {
 	if found.Platform != "shopify" {
 		t.Fatalf("got %+v (%v)", found, err)
 	}
+	if _, err := client.DetectPlatform(ctx, "shop.example"); err != nil {
+		t.Fatalf("a bare domain stands for an HTTPS address, got %v", err)
+	}
 	connection, err := client.ConnectStore(ctx, "https://shop.example")
 	if err != nil {
 		t.Fatalf("got %+v (%v)", connection, err)
@@ -107,7 +110,14 @@ func TestMerchantCallsCarryTheSessionTokenToTheContractRoutes(t *testing.T) {
 	if len(readiness.Items) != 2 {
 		t.Fatalf("got %+v (%v)", readiness, err)
 	}
-	want := "GET /v1/merchant/stores,POST /v1/stores/detect,POST /v1/stores/connect,POST /v1/stores/s1/sync,GET /v1/stores/s1/readiness"
+	assertTheCalls(t, fake)
+}
+
+// assertTheCalls checks what the server saw: the routes in order, the session token on each,
+// and the bodies that the contract names.
+func assertTheCalls(t *testing.T, fake *merchantServer) {
+	t.Helper()
+	want := "GET /v1/merchant/stores,POST /v1/stores/detect,POST /v1/stores/detect,POST /v1/stores/connect,POST /v1/stores/s1/sync,GET /v1/stores/s1/readiness"
 	if strings.Join(fake.calls(), ",") != want {
 		t.Fatalf("the calls are %v", fake.calls())
 	}
@@ -119,8 +129,11 @@ func TestMerchantCallsCarryTheSessionTokenToTheContractRoutes(t *testing.T) {
 	if fake.bodies[1] != `{"store_url":"https://shop.example"}` {
 		t.Fatalf("detection sends the trimmed store URL only, got %s", fake.bodies[1])
 	}
-	if fake.bodies[3] != "" {
-		t.Fatalf("a refresh sends no body, got %s", fake.bodies[3])
+	if fake.bodies[2] != `{"store_url":"https://shop.example"}` {
+		t.Fatalf("a bare domain is sent as an HTTPS address, got %s", fake.bodies[2])
+	}
+	if fake.bodies[4] != "" {
+		t.Fatalf("a refresh sends no body, got %s", fake.bodies[4])
 	}
 }
 
@@ -152,7 +165,7 @@ func TestAMerchantCallThatCannotSucceedNeverReachesTheServer(t *testing.T) {
 			t.Fatalf("the refusal names the way forward, got %q", failure.Reason)
 		}
 	}
-	for _, address := range []string{"", "http://shop.example", "ftp://shop.example", "https://", "https://user:pass@shop.example", "shop.example", "https://" + strings.Repeat("a", MaxStoreURLLength)} {
+	for _, address := range []string{"", "http://shop.example", "ftp://shop.example", "https://", "https://user:pass@shop.example", "https://" + strings.Repeat("a", MaxStoreURLLength)} {
 		if _, err := signedIn.DetectPlatform(ctx, address); err == nil {
 			t.Errorf("%q was sent", address)
 		}

@@ -32,13 +32,17 @@ func (c *Client) requireSession(what string) error {
 	return nil
 }
 
-// checkStoreURL refuses a URL the SDK will not send: it must be an HTTPS address that
-// names a host and carries no credentials. The server decides again which origins it
+// checkStoreURL refuses a URL the SDK will not send: it must be an HTTPS address, or a bare
+// domain that stands for one, that names a host and carries no credentials. The server decides again which origins it
 // may read, so this is a courtesy to the person who typed it.
 func checkStoreURL(storeURL string) (string, error) {
 	trimmed := strings.TrimSpace(storeURL)
 	if trimmed == "" {
 		return "", errs.New(errs.InvalidRequest, "the store URL is empty")
+	}
+	if !strings.Contains(trimmed, "://") {
+		// A bare domain such as your-store.example is an HTTPS address.
+		trimmed = "https://" + trimmed
 	}
 	if len(trimmed) > MaxStoreURLLength {
 		return "", errs.New(errs.InvalidRequest, "the store URL is too long")
