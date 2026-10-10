@@ -204,11 +204,23 @@ test("Ask about this product puts the product and its merchant in the composer a
  assert.deepEqual(extensions.sent,[{role:"user",content:[{type:"text",text:"Tell me more about TEST ceramic kettle from TEST store."}]}]);
 });
 
-test("only an allowed image of a product is shown",async()=>{
+test("only an allowed image of a product is shown, and a product without one shows no image at all",async()=>{
  const {root}=await open({products:[{...kettle,images:["https://evil.example/a.png","https://cdn.shopify.com/a/kettle.png","https://cdn.shopify.com/a/diagram.svg"]}]});
  const images=root.all().filter(node=>node.tagName==="img");
  assert.equal(images.length,1);
  assert.equal(images[0].src,"https://cdn.shopify.com/a/kettle.png");
+ assert.equal(images[0].alt,"TEST ceramic kettle");
+
+ const bare=await open({products:[{...scarf,images:["https://evil.example/a.png","http://cdn.shopify.com/a/scarf.png"]},{...kettle,id:"lst_two",variant_id:"lst_two"}]});
+ assert.equal(bare.root.all().filter(node=>node.tagName==="img").length,0,"no substitute image stands in for a missing one");
+});
+
+test("a product card shows the title, the merchant, the price, and the availability and nothing that the merchant did not state",async()=>{
+ const {root}=await open({products:[kettle,scarf]});
+ const cards=root.all().filter(node=>node.tagName==="article");
+ assert.equal(cards.length,2);
+ assert.deepEqual(cards[0].all().filter(node=>["h3","p"].includes(node.tagName)).map(node=>node.textContent),["TEST ceramic kettle","TEST store","5.00 USD","Available"]);
+ assert.deepEqual(cards[1].all().filter(node=>["h3","p"].includes(node.tagName)).map(node=>node.textContent),["TEST wool scarf","TEST store","25.00 USD","Unavailable"]);
 });
 
 test("a deep link opens the cart, a product, a store, a comparison, or the workspace, and anything else is ignored",async()=>{

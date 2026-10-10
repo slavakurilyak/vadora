@@ -15,6 +15,7 @@ test("inline, the marketplace is a carousel of at most eight products, each with
   assert.equal(imagesOf(card).length,1,"each item has an image");
   assert.ok(imagesOf(card).every(image=>typeof image.alt==="string"&&image.alt.length>0),"and the image has alt text");
   assert.deepEqual(labelsOf(card),["Select"],"and one action");
+  assert.deepEqual(card.all().filter(node=>["h3","p"].includes(node.tagName)).map(node=>node.textContent).slice(1),["TEST store","5.00 USD","Available"],"and the merchant, the price, and the availability");
   assert.equal(card.all().filter(node=>node.tagName==="input").length,0,"and no field to fill in");
  }
  assert.ok(root.text().includes("Showing 8 of 10 products."));
