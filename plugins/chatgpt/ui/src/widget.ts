@@ -141,7 +141,7 @@ export function mount(app:Host,extensions:Extensions,page:Page):void {
  }
  function renderProducts(products:Product[],full:boolean):void {
   const visible=products.slice(0,full?gridLimit:carouselLimit);
-  const grid=text("div","","grid");for(const product of visible)grid.append(productCard(product,full));root.append(grid);
+  const grid=text("div","",full?"grid":"grid carousel");for(const product of visible)grid.append(productCard(product,full));root.append(grid);
   if(products.length===0)root.append(text("p","No published products match this view."));
   if(products.length>visible.length)root.append(text("p",`Showing ${visible.length} of ${products.length} products.`,"muted"));
   if(!full&&canExpand(app))root.append(action("Expand",expand));

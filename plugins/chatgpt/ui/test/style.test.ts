@@ -152,6 +152,12 @@ test("every size follows the reader's text size, nothing has a fixed height, and
  assert.match(html,/<html lang="en">/);
 });
 
+test("the inline grid is compact, wraps with the reader's text size, and has no scroll area",()=>{
+ assert.match(raw(".carousel","grid-template-columns"),/^repeat\(auto-fit,minmax\(min\(100%,11rem\),1fr\)\)$/);
+ assert.match(raw(".grid","grid-template-columns"),/minmax\(min\(100%,16rem\),1fr\)/);
+ assert.ok(!raw(".carousel","gap").includes("px"));
+});
+
 test("the font is the host's or the system's, and the stylesheet loads nothing of its own",()=>{
  assert.match(declared(":root","font-family","light"),/system-ui/);
  assert.match(raw(":root","font-family"),/^var\(--font-sans,/);

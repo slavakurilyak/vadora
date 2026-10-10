@@ -51,7 +51,10 @@ func TestTheWidgetPassesItsTypeScriptTests(t *testing.T) {
 	if seen["tests"] < 50 {
 		t.Fatalf("the widget has at least fifty tests, and the run reports %v\n%s", seen, output)
 	}
-	if seen["pass"] != seen["tests"] || seen["fail"] != 0 {
+	if seen["pass"] != seen["tests"] {
+		t.Fatalf("every widget test passes, and the run reports %v\n%s", seen, output)
+	}
+	if seen["fail"] != 0 {
 		t.Fatalf("every widget test passes, and the run reports %v\n%s", seen, output)
 	}
 }
