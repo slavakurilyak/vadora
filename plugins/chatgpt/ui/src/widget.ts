@@ -129,7 +129,7 @@ export function mount(app:Host,extensions:Extensions,page:Page):void {
   const card=text("article","","card");
   const image=product.images?.find(allowedImage);
   if(image) {const img=page.document.createElement("img");img.src=image;img.alt=product.title;img.loading="lazy";card.append(img);}
-  card.append(text("h3",product.title),text("p",product.merchant),text("p",`${product.price} ${product.currency}`),text("p",product.available?"Available":"Unavailable"));
+  card.append(text("h2",product.title),text("p",product.merchant),text("p",`${product.price} ${product.currency}`),text("p",product.available?"Available":"Unavailable"));
   const actions=text("div","","actions");
   if(!full) {actions.append(action("Select",()=>select(product,1),!product.available,true));card.append(actions);return card;}
   const quantity=page.document.createElement("input");quantity.type="number";quantity.min="1";quantity.max="100";quantity.value="1";quantity.setAttribute("aria-label","Quantity");card.append(quantity);

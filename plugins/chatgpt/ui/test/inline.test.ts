@@ -19,7 +19,7 @@ test("inline, the marketplace is a carousel of at most eight products, each with
   assert.equal(imagesOf(card).length,1,"each item has an image");
   assert.ok(imagesOf(card).every(image=>typeof image.alt==="string"&&image.alt.length>0),"and the image has alt text");
   assert.deepEqual(labelsOf(card),["Select"],"and one action");
-  assert.deepEqual(card.all().filter(node=>["h3","p"].includes(node.tagName)).map(node=>node.textContent).slice(1),["TEST store","5.00 USD","Available"],"and the merchant, the price, and the availability");
+  assert.deepEqual(card.all().filter(node=>["h2","p"].includes(node.tagName)).map(node=>node.textContent).slice(1),["TEST store","5.00 USD","Available"],"and the merchant, the price, and the availability");
   assert.equal(card.all().filter(node=>node.tagName==="input").length,0,"and no field to fill in");
  }
  assert.ok(root.text().includes("Showing 8 of 10 products."));
@@ -191,4 +191,19 @@ test("the widget hands the host context to the page at connection and at every c
  assert.equal(cardsOf(brokenPage.root).length,3);
  broken.onhostcontextchanged?.({theme:"light"});await settle();
  assert.equal(cardsOf(brokenPage.root).length,3,"and it still draws after a change");
+});
+
+test("no view skips a heading level on the way down",async()=>{
+ const states:unknown[]=[{products:items(3),stores:marketplace.stores,settings:{mode:"both"}},{cart:cartOf(2),product:kettle,order:orderOf("paid"),checkout_enabled:true},{products:[],settings:{mode:"sell"}}];
+ for(const mode of ["inline","fullscreen"] as const) {
+  for(const state of states) {
+   const {root}=await open(state,{},mode);
+   let previous=0;
+   for(const heading of root.all().filter(node=>/^h[1-6]$/.test(node.tagName))) {
+    const level=Number(heading.tagName.slice(1));
+    assert.ok(previous===0||level<=previous+1,`a ${mode} view goes from a level ${previous} heading to a level ${level} heading`);
+    previous=level;
+   }
+  }
+ }
 });

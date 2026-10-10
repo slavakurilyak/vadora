@@ -46,6 +46,7 @@ section{margin-bottom:1rem}
 .card{border:1px solid var(--line);border-radius:.75rem;padding:1rem;display:flex;flex-direction:column;gap:.5rem}
 .carousel .card{padding:.75rem}
 .card>*{margin:0}
+.card>h2{font-size:1.17rem}
 img{width:100%;aspect-ratio:4/3;object-fit:contain;border-radius:.5rem}
 .actions{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:auto}
 main>.actions{margin-bottom:.75rem}

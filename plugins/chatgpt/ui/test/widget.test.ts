@@ -15,6 +15,7 @@ test("the global entrypoint renders the marketplace from the initial tool result
  for(const want of ["Marketplace","TEST ceramic kettle","5.00 USD","Available","TEST wool scarf","25.00 USD","Unavailable","Coming soon: Base, Ethereum, MPP, UCP, ACP, WooCommerce, Claude Code"]) {
   assert.ok(page.includes(want),want);
  }
+ assert.deepEqual(root.all().filter(node=>node.tagName==="h1").map(node=>node.textContent),["Marketplace"],"the fullscreen page has one first level heading");
  one(root.buttons("TEST store"));
  assert.equal(root.buttons("Select").length,2);
  assert.equal(root.buttons("Select").filter(button=>button.disabled).length,1,"an unavailable product cannot be selected");
@@ -219,8 +220,8 @@ test("a product card shows the title, the merchant, the price, and the availabil
  const {root}=await open({products:[kettle,scarf]});
  const cards=root.all().filter(node=>node.tagName==="article");
  assert.equal(cards.length,2);
- assert.deepEqual(cards[0].all().filter(node=>["h3","p"].includes(node.tagName)).map(node=>node.textContent),["TEST ceramic kettle","TEST store","5.00 USD","Available"]);
- assert.deepEqual(cards[1].all().filter(node=>["h3","p"].includes(node.tagName)).map(node=>node.textContent),["TEST wool scarf","TEST store","25.00 USD","Unavailable"]);
+ assert.deepEqual(cards[0].all().filter(node=>["h2","p"].includes(node.tagName)).map(node=>node.textContent),["TEST ceramic kettle","TEST store","5.00 USD","Available"]);
+ assert.deepEqual(cards[1].all().filter(node=>["h2","p"].includes(node.tagName)).map(node=>node.textContent),["TEST wool scarf","TEST store","25.00 USD","Unavailable"]);
 });
 
 test("a deep link opens the cart, a product, a store, a comparison, or the workspace, and anything else is ignored",async()=>{
