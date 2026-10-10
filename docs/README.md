@@ -27,6 +27,10 @@ The `sdk` package is the API client. It checks what the server would refuse befo
 
 Everything inside a plugin package is public. `plugins/chatgpt` holds the ChatGPT package and the browser UI of its extension. `skills` holds the host independent skills, each of which is instruction text for the model and never authority.
 
+## Preview the ChatGPT widget
+
+The widget is TypeScript in `plugins/chatgpt/ui`. Run `npm install` and then `npm test` there to run its tests, which drive the real widget against a simulated host and against the real MCP Apps bridge, and which check its stylesheet. Run `npm run preview` there and open the address that it prints, on the loopback address of your own machine, to see the real widget in a browser, in the inline card and in fullscreen, in light and dark, and at larger text sizes. The preview hosts the widget with the real bridge and answers its tool calls with labeled TEST products. It opens no link, sends no message, and moves no money, and ChatGPT draws the widget with its own chrome and style variables.
+
 ## Fixtures
 
 `fixtures` holds the labeled test store descriptions. A test store is always labeled TEST, and its results never count as revenue or as a live customer.

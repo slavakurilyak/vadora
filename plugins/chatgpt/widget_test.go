@@ -12,8 +12,8 @@ import (
 )
 
 // widgetTestFiles are the TypeScript test files of the widget that the ledger cites: the link and state rules, the widget in
-// the fullscreen view and in the inline card, the widget over the real MCP Apps bridge, and the stylesheet.
-var widgetTestFiles = []string{"state.test.ts", "widget.test.ts", "inline.test.ts", "protocol.test.ts", "style.test.ts"}
+// the fullscreen view and in the inline card, the widget over the real MCP Apps bridge, the stylesheet, and the preview server.
+var widgetTestFiles = []string{"state.test.ts", "widget.test.ts", "inline.test.ts", "protocol.test.ts", "style.test.ts", "preview.test.ts"}
 
 // The widget is TypeScript that the conversation loads, and its tests run with Node in the ui folder. This test runs them
 // with the same command that a developer runs, so a failing widget test fails the Go suite too. It runs the real widget
