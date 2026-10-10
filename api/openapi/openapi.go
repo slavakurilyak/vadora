@@ -166,7 +166,7 @@ func Build() (Specification, error) {
 				"authenticated with a buyer credential or a checkout page sign in on Vadora's own",
 				"domain. A plugin sign in is never accepted for a buyer call.",
 			}, "\n"),
-			Version: "0.2.0",
+			Version: "0.2.1",
 		},
 		Servers: []Server{
 			{URL: "https://api.vadora.xyz", Description: "The production API origin"},

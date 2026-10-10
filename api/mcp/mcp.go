@@ -20,7 +20,7 @@ import (
 const ProtocolVersion = "2026-07-28"
 
 // ContractVersion changes when a published tool schema changes.
-const ContractVersion = "0.2.0"
+const ContractVersion = "0.2.1"
 
 // ServerName is the MCP server's name, as a host displays it.
 const ServerName = "xyz.vadora/vadora"

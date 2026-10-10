@@ -29,7 +29,10 @@ func getOnboardingStateTool() Tool {
 		Description: strings.Join([]string{
 			"Returns the merchant's current onboarding state and every missing readiness item with",
 			"a link to the hosted workspace where the merchant completes it. It never returns a",
-			"credential, and it writes nothing. May return: " + codeList(codes),
+			"credential, and it writes nothing.",
+			"When an item includes action_label, show a button or link with that label pointing to",
+			"its url, and explain next_step. A test purchase opens the hosted guide and requires",
+			"the merchant to complete checkout there. May return: " + codeList(codes),
 		}, "\n"),
 		InputSchema: openapi.Schema{
 			Type:        SchemaObjectType,
@@ -150,7 +153,10 @@ func getReadinessTool() Tool {
 		ReadOnly: true,
 		Description: strings.Join([]string{
 			"Returns the merchant's readiness checklist in its defined order with the evidence for",
-			"each completed item and a hosted workspace link for each missing one. The checklist",
+			"each completed item and a hosted workspace link for each missing one.",
+			"When an item includes action_label, show a button or link with that label pointing to",
+			"its url, and explain next_step. A test purchase opens the hosted guide and requires",
+			"the merchant to complete checkout there. The checklist",
 			"holds at least " + itoa(minReadinessItems) + " item and at most " +
 				itoa(MaxReadinessItems) + ". The store's agent surface line is shown on the read",
 			"only line with its limitations, and it never blocks publication. May return: " +
