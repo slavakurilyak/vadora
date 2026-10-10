@@ -141,7 +141,9 @@ export function mount(app:Host,extensions:Extensions,page:Page):void {
  }
  function renderProducts(products:Product[],full:boolean):void {
   const visible=products.slice(0,full?gridLimit:carouselLimit);
-  const grid=text("div","",full?"grid":"grid carousel");for(const product of visible)grid.append(productCard(product,full));root.append(grid);
+  const grid=text("div","",full?"grid":"grid carousel");
+  if(!full) {grid.setAttribute("role","region");grid.setAttribute("aria-label","Products");}
+  for(const product of visible)grid.append(productCard(product,full));root.append(grid);
   if(products.length===0)root.append(text("p","No published products match this view."));
   if(products.length>visible.length)root.append(text("p",`Showing ${visible.length} of ${products.length} products.`,"muted"));
   if(!full&&canExpand(app))root.append(action("Expand",expand));
@@ -165,24 +167,28 @@ export function mount(app:Host,extensions:Extensions,page:Page):void {
    if(!link)throw new Error("Checkout unavailable");await open(link,"https://checkout.vadora.xyz");
   },view.checkout_enabled!==true,true);
   const refreshStatus=()=>action("Refresh order status",refresh);
+  const actions:HTMLElement[]=[];
   if(full) {
-   if(receiptUrl)root.append(viewReceipt());
-   root.append(pay(),refreshStatus());
-   return;
+   if(receiptUrl)actions.push(viewReceipt());
+   actions.push(pay(),refreshStatus());
+  } else if(view.order?.payment_status==="paid") {
+   if(receiptUrl)actions.push(viewReceipt());
+  } else {
+   if(view.cart)actions.push(pay());
+   if(view.cart||view.order)actions.push(refreshStatus());
   }
-  if(view.order?.payment_status==="paid") {
-   if(receiptUrl)root.append(viewReceipt());
-   return;
-  }
-  if(view.cart)root.append(pay());
-  if(view.cart||view.order)root.append(refreshStatus());
+  if(actions.length>0) {const row=text("div","","actions");row.append(...actions);root.append(row);}
  }
  function renderSearch():void {
   const form=page.document.createElement("form");const query=page.document.createElement("input");query.placeholder="Search physical products";query.maxLength=128;query.setAttribute("aria-label","Search products");
   form.append(query,action("Search",async()=>{view=await call("search_products",{query:query.value,limit:20});render();}));form.addEventListener("submit",e=>e.preventDefault());root.append(form);
  }
  function renderStores():void {
-  for(const store of view.stores??[])root.append(action(store.name,async()=>{view=await call("search_products",{store_id:store.id,limit:20});render();}));
+  const stores=view.stores??[];
+  if(stores.length===0)return;
+  const row=text("div","","actions");
+  for(const store of stores)row.append(action(store.name,async()=>{view=await call("search_products",{store_id:store.id,limit:20});render();}));
+  root.append(row);
  }
  // renderMerchant is the merchant view. Inline it carries the one action that opens the hosted workspace, because the
  // inline view has no toolbar to reach it.

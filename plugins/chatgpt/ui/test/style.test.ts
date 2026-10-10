@@ -144,7 +144,11 @@ test("every size follows the reader's text size, nothing has a fixed height, and
  assert.ok(!/\d\s*px\b/.test(css.replace(/\b1px solid\b/g,"")),"a size is in rem, and only a one pixel border is in pixels");
  assert.equal(declared(":root","font-size","light"),"1rem");
  assert.ok(!/(?:^|[;{\s])(?:max-|min-)?height\s*:/m.test(css),"no height, so enlarged text is never clipped");
- assert.ok(!/(?:^|[;{\s])overflow(?:-[xy])?\s*:/m.test(css),"no overflow rule, so a card holds no second scroll area");
+ const scrollers=all.filter(rule=>[...rule.declarations.keys()].some(name=>/^overflow(?:-[xy])?$/.test(name)));
+ assert.deepEqual(scrollers.map(rule=>rule.selector),["@media(max-width:34rem) .carousel"],"only the inline carousel on a narrow screen scrolls");
+ assert.equal(scrollers[0].declarations.get("overflow-x"),"auto","it scrolls sideways");
+ assert.equal(scrollers[0].declarations.get("overflow-y"),"hidden","and never vertically, so a card holds no second vertical scroll area");
+ assert.ok(!scrollers[0].declarations.has("overflow"));
  assert.ok(!/position\s*:\s*(?:fixed|sticky|absolute)/.test(css),"no layer that covers the conversation");
  assert.ok(!/(?:text-size-adjust|zoom)\s*:/.test(css),"no rule that blocks the reader's zoom");
  assert.ok(!/user-scalable\s*=\s*no|maximum-scale/i.test(html),"the viewport lets the reader scale the page");
@@ -152,10 +156,14 @@ test("every size follows the reader's text size, nothing has a fixed height, and
  assert.match(html,/<html lang="en">/);
 });
 
-test("the inline grid is compact, wraps with the reader's text size, and has no scroll area",()=>{
+test("the inline items wrap in a compact grid on a wide screen and swipe sideways on a narrow one",()=>{
  assert.match(raw(".carousel","grid-template-columns"),/^repeat\(auto-fit,minmax\(min\(100%,11rem\),1fr\)\)$/);
  assert.match(raw(".grid","grid-template-columns"),/minmax\(min\(100%,16rem\),1fr\)/);
  assert.ok(!raw(".carousel","gap").includes("px"));
+ assert.equal(raw("@media(max-width:34rem) .carousel","display"),"flex");
+ assert.equal(raw("@media(max-width:34rem) .carousel","scroll-snap-type"),"x mandatory");
+ assert.equal(raw("@media(max-width:34rem) .carousel","overscroll-behavior-x"),"contain","a swipe at the end of the carousel does not scroll the conversation sideways");
+ assert.match(raw("@media(max-width:34rem) .carousel .card","flex"),/^0 0 min\(14rem,80%\)$/);
 });
 
 test("the font is the host's or the system's, and the stylesheet loads nothing of its own",()=>{

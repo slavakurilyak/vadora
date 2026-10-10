@@ -11,7 +11,10 @@ import {cardsOf,cartOf,checkout,imagesOf,items,kettle,labelsOf,marketplace,one,o
 test("inline, the marketplace is a carousel of at most eight products, each with an image and one action, and it has no tabs, search, or store list",async()=>{
  const {root,host}=await open({products:items(10),stores:marketplace.stores,settings:{mode:"both"}},{},"inline");
  assert.equal(cardsOf(root).length,8,"a carousel holds at most eight items");
- assert.equal(root.all().filter(node=>node.className==="grid carousel").length,1,"the inline items sit in one compact grid that wraps and never scrolls");
+ const carousel=root.all().filter(node=>node.className==="grid carousel");
+ assert.equal(carousel.length,1,"the inline items sit in one compact carousel");
+ assert.equal(carousel[0].attributes.get("role"),"region");
+ assert.equal(carousel[0].attributes.get("aria-label"),"Products","a person who cannot see the carousel hears what it is");
  for(const card of cardsOf(root)) {
   assert.equal(imagesOf(card).length,1,"each item has an image");
   assert.ok(imagesOf(card).every(image=>typeof image.alt==="string"&&image.alt.length>0),"and the image has alt text");
@@ -54,7 +57,9 @@ test("Expand asks the host for fullscreen and draws the whole marketplace, and c
  assert.equal(cardsOf(root).length,10);
  for(const card of cardsOf(root))assert.deepEqual(labelsOf(card),["Select","Ask about this product","Compare"],"the fullscreen view has every product action");
  for(const label of ["Shop","Cart","Sell","Search","TEST store"])one(root.buttons(label));
- assert.equal(root.all().filter(node=>node.className==="grid").length,1,"the fullscreen items sit in the roomy grid");
+ const grid=root.all().filter(node=>node.className==="grid");
+ assert.equal(grid.length,1,"the fullscreen items sit in the roomy grid");
+ assert.equal(grid[0].attributes.has("role"),false);
  assert.equal(root.buttons("Expand").length,0,"the fullscreen view is already expanded");
  assert.ok(root.text().includes("Coming soon: Base, Ethereum, MPP, UCP, ACP, WooCommerce, Claude Code"));
 
