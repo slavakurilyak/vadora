@@ -282,7 +282,7 @@ func purchase() Operation {
 			"404": errorResponse("The quote belongs to another buyer, or does not exist."),
 			"409": errorResponse("The payment was rejected before any funds moved."),
 			"410": errorResponse("The quote expired, so the buyer requests a new quote."),
-			"422": errorResponse("The quote offered no supported payment method."),
+			"422": errorResponse("The quote offered no supported payment method, or the payment uses a method that the quote did not offer."),
 			"429": errorResponse("A payment attempt is pending: wait, and never pay again."),
 		},
 	}

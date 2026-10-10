@@ -62,7 +62,7 @@ func Validate(name string, data []byte) error {
 	if !strings.Contains(text, "Explicit user instructions take priority") {
 		return errors.New("skill must respect explicit user instructions")
 	}
-	for _, phrase := range []string{"vadora buy", "BEGIN PRIVATE KEY", "seed phrase:", "Bearer ", "change ownership", "grant permission", "sign the payment", "run a command"} {
+	for _, phrase := range []string{"vadora buy", "vadora test purchase", "BEGIN PRIVATE KEY", "seed phrase:", "Bearer ", "change ownership", "grant permission", "sign the payment", "run a command"} {
 		if strings.Contains(strings.ToLower(text), strings.ToLower(phrase)) {
 			return errors.New("skill contains a forbidden instruction or credential")
 		}

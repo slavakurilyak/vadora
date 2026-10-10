@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -401,5 +402,48 @@ func TestAFormResultOutsideTheOfferedSetIsRefused(t *testing.T) {
 	}
 	if err := ValidateSelection(choices, []string{"lst_1", "lst_3"}); err != nil {
 		t.Fatalf("an offered selection is accepted: %v", err)
+	}
+}
+
+// No manifest, skill, UI resource, or script that the package carries holds a credential or a
+// server internal: no private key, no key id, no token, no loopback or internal address, no server
+// path, no database name, and no setting of the server (010:143).
+func TestNoPackageFileOrUIResourceHoldsACredentialOrAServerInternal(t *testing.T) {
+	files, err := PackageFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	carried := map[string]string{}
+	for name, data := range files {
+		carried[name] = string(data)
+	}
+	for _, name := range []string{"assets/widget.js", "assets/widget.css", "assets/widget.html", "assets/cart.svg"} {
+		data, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		carried[name] = string(data)
+	}
+	for _, resource := range testAdapter(t).Resources() {
+		carried[resource.URI] = resource.Text
+	}
+	forbidden := map[string]*regexp.Regexp{
+		"a private key":         regexp.MustCompile(`BEGIN [A-Z ]*PRIVATE KEY`),
+		"a cloud key id":        regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`),
+		"a bearer token":        regexp.MustCompile(`(?i)bearer\s+[a-z0-9._~+/=-]{16,}`),
+		"a signed token":        regexp.MustCompile(`eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.`),
+		"a service token":       regexp.MustCompile(`\b(?:sk|pk|ghp|xox[bp])[-_][A-Za-z0-9_-]{20,}`),
+		"a spending key":        regexp.MustCompile(`\b[1-9A-HJ-NP-Za-km-z]{80,}\b`),
+		"a loopback address":    regexp.MustCompile(`(?i)localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0`),
+		"a server path":         regexp.MustCompile(`/(?:var/lib|etc|opt)/vadora`),
+		"a database or replica": regexp.MustCompile(`(?i)sqlite|litestream|\.db\b`),
+		"a server setting":      regexp.MustCompile(`\bVADORA_[A-Z_]+\b`),
+	}
+	for name, content := range carried {
+		for what, pattern := range forbidden {
+			if found := pattern.FindString(content); found != "" {
+				t.Errorf("%s holds %s: %q", name, what, found)
+			}
+		}
 	}
 }

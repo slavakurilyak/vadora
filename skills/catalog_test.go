@@ -30,7 +30,7 @@ func TestCanonicalSkillAndCatalog(t *testing.T) {
 	}
 }
 func TestSkillValidatorRejectsUnsupportedInstructionsAndFiles(t *testing.T) {
-	for _, change := range []string{"`unknown_tool`", "vadora buy", "BEGIN PRIVATE KEY", "change ownership", "grant permission"} {
+	for _, change := range []string{"`unknown_tool`", "vadora buy", "vadora test purchase", "Vadora Buy", "BEGIN PRIVATE KEY", "Bearer abc", "change ownership", "grant permission", "sign the payment", "run a command"} {
 		data := append(Setup(), []byte("\n"+change)...)
 		if err := Validate("setup", data); err == nil {
 			t.Fatalf("accepted %q", change)
