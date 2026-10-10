@@ -53,6 +53,16 @@ export function checkoutLink(raw:string): string|undefined {
  if(!/^[1-9][0-9]?$|^100$/.test(quantity)) return;
  return safe;
 }
+// receiptLink accepts only the receipt page of one order on the checkout origin, with no query: the cart shows the receipt
+// of the latest order and opens nothing else (011:112).
+export function receiptLink(raw:string): string|undefined {
+ const safe=externalLink(raw,"https://checkout.vadora.xyz");
+ if(!safe) return;
+ const u=new URL(safe);
+ if(u.search) return;
+ if(!/^\/orders\/[a-zA-Z0-9_-]{1,64}$/.test(u.pathname)) return;
+ return safe;
+}
 export function context(view:View,comparison:string[]): Record<string,unknown> {
  const value:Record<string,unknown>={comparison:comparison.filter(id=>identifier.test(id)).slice(0,4)};
  if(view.cart) value.cart={listing_id:view.cart.listing_id,variant_id:view.cart.variant_id,quantity:view.cart.quantity};

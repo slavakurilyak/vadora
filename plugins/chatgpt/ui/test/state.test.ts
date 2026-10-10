@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {allowedImage,deepLink,checkoutLink,composerMessage,context,contextBlocks,plain} from "../src/state.ts";
+import {allowedImage,deepLink,checkoutLink,composerMessage,context,contextBlocks,plain,receiptLink} from "../src/state.ts";
 test("navigation accepts only the documented routes and rejects double decoding",()=>{
  assert.deepEqual(deepLink("/products/a"),{route:"/products",ids:["a"]});
  for(const input of ["//evil.test/x","/products/a?token=x","/products/%252f","/compare?ids=a,b,c,d,e","/cart#x","/../secret"])
@@ -16,6 +16,13 @@ test("payment navigation allows the canonical handoff and no credential",()=>{
  assert.ok(checkoutLink("https://checkout.vadora.xyz/pay?listing=a&variant=b&quantity=2"));
  for(const link of ["https://checkout.vadora.xyz.evil.test/pay?listing=a&variant=b&quantity=2","https://checkout.vadora.xyz/pay?listing=a&variant=b&quantity=0","https://checkout.vadora.xyz/pay?listing=a&variant=b&quantity=2&token=x","https://checkout.vadora.xyz/pay?listing=a&listing=c&quantity=2","javascript:alert(1)"])
  assert.equal(checkoutLink(link),undefined);
+});
+test("a receipt link is the receipt page of one order on the checkout origin and nothing else",()=>{
+ assert.equal(receiptLink("https://checkout.vadora.xyz/orders/ord_7"),"https://checkout.vadora.xyz/orders/ord_7");
+ for(const link of ["https://checkout.vadora.xyz.evil.test/orders/ord_7","https://evil.example/orders/ord_7","http://checkout.vadora.xyz/orders/ord_7","https://checkout.vadora.xyz/orders/ord_7?token=x",
+  "https://checkout.vadora.xyz/orders/","https://checkout.vadora.xyz/orders/a/b","https://checkout.vadora.xyz/pay","https://checkout.vadora.xyz/orders/"+"a".repeat(65),
+  "https://u:p@checkout.vadora.xyz/orders/ord_7","https://checkout.vadora.xyz:444/orders/ord_7","javascript:alert(1)",""])
+ assert.equal(receiptLink(link),undefined,link);
 });
 test("model context contains only the permitted selection and status fields",()=>{
  const data=context({cart:{listing_id:"a",variant_id:"b",quantity:1},order:{number:"1",total:"2 USDC",payment_status:"paid",fulfillment_status:"received",receipt_url:"https://secret"}},["a"]);
