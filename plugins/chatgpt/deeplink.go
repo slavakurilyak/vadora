@@ -92,3 +92,19 @@ func ProductLink(pluginID, listingID, storefrontURL string, capabilities Capabil
 	}
 	return "https://chatgpt.com/plugins/" + url.PathEscape(pluginID) + "/app/open_marketplace?path=" + url.QueryEscape("/products/"+listingID)
 }
+
+// StoreLink is the "Open in ChatGPT" web link of a store. It opens the store in the app where the host has deep links, and it
+// falls back to the storefront page where the host has none, so a link that a merchant publishes always leads somewhere
+// (011:134). The link carries the plugin and store identifiers and nothing else.
+func StoreLink(pluginID, storeID, storefrontURL string, capabilities Capabilities) string {
+	if !capabilities.DeepLinks {
+		return storefrontURL
+	}
+	if !identifier.MatchString(pluginID) {
+		return storefrontURL
+	}
+	if !identifier.MatchString(storeID) {
+		return storefrontURL
+	}
+	return "https://chatgpt.com/plugins/" + url.PathEscape(pluginID) + "/app/open_marketplace?path=" + url.QueryEscape("/stores/"+storeID)
+}

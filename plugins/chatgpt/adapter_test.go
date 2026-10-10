@@ -283,6 +283,32 @@ func TestTheOpenInChatGPTLinkFallsBackToTheStorefrontWhereDeepLinksAreUnavailabl
 	}
 }
 
+// A merchant publishes the store link in the discovery bundle. It opens the store where the host has deep links, falls back to
+// the storefront page where it has none, and never carries more than the two identifiers (011:134).
+func TestTheStoreLinkOpensTheStoreOrFallsBackToTheStorefront(t *testing.T) {
+	storefront := "https://vadora.test/stores/st_1"
+	with := Capabilities{DeepLinks: true}
+	link := StoreLink("vadora", "st_1", storefront, with)
+	if link != "https://chatgpt.com/plugins/vadora/app/open_marketplace?path=%2Fstores%2Fst_1" {
+		t.Fatalf("a host with deep links opens the store in the app, got %q", link)
+	}
+	if got := ParseDeepLink("/stores/st_1"); got.Route != "/stores" {
+		t.Fatal("the deep link that the bundle publishes is one that the app opens")
+	}
+	if got := StoreLink("vadora", "st_1", storefront, Capabilities{}); got != storefront {
+		t.Fatalf("a host without deep links gets the storefront page, got %q", got)
+	}
+	for _, bad := range []struct{ plugin, store string }{{"vad ora", "st_1"}, {"vadora", "st_1?token=1"}, {"vadora", ""}, {"", "st_1"}, {"vadora", "../x"}} {
+		if got := StoreLink(bad.plugin, bad.store, storefront, with); got != storefront {
+			t.Errorf("%+v builds %q instead of the storefront page", bad, got)
+		}
+	}
+	android := PlatformSupport("android", Capabilities{DeepLinks: true, Mentions: true})
+	if got := StoreLink("vadora", "st_1", storefront, android); got != storefront {
+		t.Fatalf("on Android the storefront link replaces the deep link, got %q", got)
+	}
+}
+
 // Each platform keeps only what it supports: deep links are absent on Android, mention search is
 // desktop only, rich forms are desktop and web only, thumbnails are absent on iOS, and a new
 // conversation is a desktop and web feature (011:94). An unknown platform gets nothing.
