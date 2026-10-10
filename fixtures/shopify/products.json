@@ -1,0 +1,22 @@
+{
+  "label": "TEST products for the Shopify development store fixture",
+  "products": [
+    {
+      "title": "TEST ceramic kettle",
+      "category": "Home",
+      "physical": true,
+      "description": "A TEST kettle for a TEST store.",
+      "variants": [{"title": "Default", "price_minor": 500, "currency": "USD", "available": true}]
+    },
+    {
+      "title": "TEST wool scarf",
+      "category": "Apparel",
+      "physical": true,
+      "description": "A TEST scarf for a TEST store.",
+      "variants": [
+        {"title": "Grey", "price_minor": 2500, "currency": "USD", "available": true},
+        {"title": "Navy", "price_minor": 2500, "currency": "USD", "available": false}
+      ]
+    }
+  ]
+}

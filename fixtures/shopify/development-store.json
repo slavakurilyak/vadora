@@ -1,0 +1,17 @@
+{
+  "label": "TEST fixture: a transfer disabled Shopify development store",
+  "platform": "shopify",
+  "purpose": "The test stage of the first release: a shopper purchase and an independent buyer agent purchase on Solana devnet.",
+  "network": "Solana devnet",
+  "counts_as_revenue": false,
+  "counts_as_live_customer": false,
+  "setup": [
+    "Create a development store in the Shopify Dev Dashboard and keep it transfer disabled.",
+    "Create the store's own custom distribution app and generate its install link for the store's myshopify domain.",
+    "Give the operator the myshopify domain. The operator invites the merchant account to the store.",
+    "Load the sample catalog from products.json with the store's own admin."
+  ],
+  "storefront": {"password_protected": false, "also_cover": "a password protected storefront for the detection tests"},
+  "currency": "USD",
+  "destinations": ["US", "CA"]
+}

@@ -219,3 +219,17 @@ func TestASkillIsPublishedOnlyForAHostThatTheLaunchScopeEnables(t *testing.T) {
 		}
 	}
 }
+
+// Every skill says that the user's explicit instructions take priority over its guidelines, so a skill is
+// instruction text for the model and never authority (013:50).
+func TestEverySkillStatesThatExplicitUserInstructionsTakePriority(t *testing.T) {
+	for _, entry := range Catalog() {
+		data, err := os.ReadFile(entry.Name + "/SKILL.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "Explicit user instructions take priority over these guidelines.") {
+			t.Errorf("the skill %q does not say that explicit user instructions take priority", entry.Name)
+		}
+	}
+}

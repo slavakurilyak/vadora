@@ -20,7 +20,9 @@ every request on its own evidence, whatever a client claims to be.
 3. `sdk` holds the API client and the plugin installer.
 4. `api/types` holds the shared request and response types, `api/openapi` the
    OpenAPI document, and `api/mcp` the MCP tool schemas.
-5. The five adapter registries live in the private repository, because the server loads them.
+5. `skills` holds the host independent skills, and `plugins/chatgpt` holds the ChatGPT plugin package and the browser UI of its extension.
+6. `LICENSE` holds the Apache License 2.0, `CLIENT_POLICY.md` the policy for the Vadora name and marks, `CONTRIBUTING.md` the contribution rules, `docs` the developer documentation, and `fixtures` the labeled test store descriptions.
+7. The five adapter registries live in the private repository, because the server loads them.
 
 ## Building
 

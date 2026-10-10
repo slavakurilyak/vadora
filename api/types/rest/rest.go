@@ -227,6 +227,10 @@ type Product struct {
 	Available       bool              `json:"available"`
 	SourceURL       string            `json:"source_url"`
 	PurchaseMethods []string          `json:"purchase_methods"`
+	// ReturnPolicy and ShipsTo are the merchant's own policies, which a shopper compares and
+	// reads before paying. They are empty when the merchant has not set them.
+	ReturnPolicy string   `json:"return_policy,omitempty"`
+	ShipsTo      []string `json:"ships_to,omitempty"`
 	// Test marks a listing of a labeled development store, so a client labels it as
 	// a test wherever it shows it.
 	Test bool `json:"test,omitempty"`
