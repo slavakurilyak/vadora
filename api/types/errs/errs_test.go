@@ -1,6 +1,9 @@
 package errs
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // allCodes lists every Code constant, so a new constant without a catalog entry
 // fails here as well as in the production path.
@@ -146,5 +149,21 @@ func TestErrorRendersCodeAndReason(t *testing.T) {
 	rendered := New(StoreDisconnected, "reconnect the store").Error()
 	if rendered != "STORE_DISCONNECTED: reconnect the store" {
 		t.Fatalf("rendered = %q", rendered)
+	}
+}
+
+// The published document lists the client actions, so the list never changes order between builds.
+func TestLeafActionsAreListedInTheSameSortedOrderEveryTime(t *testing.T) {
+	first := LeafActions()
+	if len(first) < 2 {
+		t.Fatalf("the catalog defines several actions, got %v", first)
+	}
+	if !slices.IsSorted(first) {
+		t.Fatalf("the actions are sorted, got %v", first)
+	}
+	for build := 0; build < 20; build++ {
+		if !slices.Equal(first, LeafActions()) {
+			t.Fatalf("the actions came in another order on build %d", build)
+		}
 	}
 }

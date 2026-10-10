@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 )
 
 // Code is one entry of the :ErrorCatalog:.
@@ -147,8 +148,9 @@ func Defined(code Code) (ClientAction, int, bool) {
 	return row.action, row.status, true
 }
 
-// LeafActions returns every distinct client action the catalog defines, so a
-// caller can prove the catalog still tells a client what to do.
+// LeafActions returns every distinct client action the catalog defines, in sorted
+// order, so a caller can prove the catalog still tells a client what to do and the
+// published document lists the same actions in the same order every time.
 func LeafActions() []ClientAction {
 	seen := make(map[ClientAction]bool, len(catalog))
 	for _, row := range catalog {
@@ -158,6 +160,7 @@ func LeafActions() []ClientAction {
 	for action := range seen {
 		actions = append(actions, action)
 	}
+	slices.Sort(actions)
 	if len(actions) == 0 {
 		panic("errs: the catalog defines no client action")
 	}

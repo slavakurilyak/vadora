@@ -627,3 +627,29 @@ func TestMerchantOperationsRequireTheMerchantTokenOnly(t *testing.T) {
 		}
 	}
 }
+
+// The published document is the same on every build, so a client, a golden fixture, and the contract fingerprint
+// can rely on it.
+func TestTheDocumentIsTheSameOnEveryBuild(t *testing.T) {
+	first, err := Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for build := 0; build < 30; build++ {
+		again, err := Build()
+		if err != nil {
+			t.Fatal(err)
+		}
+		repeated, err := json.Marshal(again)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(repeated) != string(encoded) {
+			t.Fatalf("build %d produced another document", build)
+		}
+	}
+}
