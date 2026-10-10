@@ -2,10 +2,14 @@ package install
 
 import (
 	"encoding/json"
-	"github.com/vadora/vadora/skills"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
+
+	"github.com/vadora/vadora/skills"
 )
 
 func TestPluginInstallIsIdempotentAndPreservesExistingEntries(t *testing.T) {
@@ -96,5 +100,57 @@ func TestStandaloneSkillWritesOnlyCanonicalInstruction(t *testing.T) {
 	}
 	if entries[0].Name() != "SKILL.md" {
 		t.Fatal("standalone metadata or executable was installed")
+	}
+}
+
+// Installing a plugin locally writes the skill files and the manifest, and nothing that runs a
+// command: no script, no executable, no hook, and no file outside the package and the local
+// marketplace entry (013:76, 012:105).
+func TestInstallingAPluginWritesNothingThatRunsACommand(t *testing.T) {
+	root := t.TempDir()
+	if _, err := Plugin(root, "chatgpt"); err != nil {
+		t.Fatal(err)
+	}
+	var written []string
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		written = append(written, filepath.ToSlash(relative))
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode().Perm()&0o111 != 0 {
+			t.Errorf("%s is executable", relative)
+		}
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".md", ".json", ".yaml":
+		default:
+			t.Errorf("%s is not an instruction or a manifest", relative)
+		}
+		if strings.Contains(strings.ToLower(relative), "hook") {
+			t.Errorf("%s is a hook", relative)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{".agents/plugins/marketplace.json", ".agents/plugins/vadora/plugin.json", ".agents/plugins/vadora/mcp.json",
+		".agents/plugins/vadora/skills/setup/SKILL.md", ".agents/plugins/vadora/skills/setup/agents/openai.yaml"} {
+		if !slices.Contains(written, want) {
+			t.Errorf("the package lacks %s, wrote %v", want, written)
+		}
+	}
+	if len(written) != 5 {
+		t.Fatalf("the install writes the package and the marketplace entry only, wrote %v", written)
 	}
 }

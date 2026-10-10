@@ -1,0 +1,20 @@
+{
+  "openai/ui": {
+    "entrypoints": [
+      {
+        "type": "thread"
+      }
+    ]
+  },
+  "securitySchemes": [
+    {
+      "scopes": [
+        "shopper"
+      ],
+      "type": "oauth2"
+    }
+  ],
+  "ui": {
+    "resourceUri": "ui://vadora/cart"
+  }
+}

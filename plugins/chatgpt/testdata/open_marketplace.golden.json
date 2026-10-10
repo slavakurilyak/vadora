@@ -1,0 +1,23 @@
+{
+  "openai/ui": {
+    "entrypoints": [
+      {
+        "type": "global"
+      }
+    ]
+  },
+  "securitySchemes": [
+    {
+      "type": "noauth"
+    },
+    {
+      "scopes": [
+        "shopper"
+      ],
+      "type": "oauth2"
+    }
+  ],
+  "ui": {
+    "resourceUri": "ui://vadora/marketplace"
+  }
+}

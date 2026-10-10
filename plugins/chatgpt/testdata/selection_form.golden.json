@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "properties": {
+    "listing_ids": {
+      "type": "array",
+      "title": "Choose products",
+      "items": {
+        "type": "string",
+        "oneOf": [
+          {
+            "const": "lst_1",
+            "title": "Kettle",
+            "x-openai-thumbnail": {
+              "src": "https://cdn.shopify.com/a.png"
+            }
+          },
+          {
+            "const": "lst_2",
+            "title": "Scarf"
+          },
+          {
+            "const": "lst_3",
+            "title": "Hat"
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "listing_ids"
+  ],
+  "additionalProperties": false
+}

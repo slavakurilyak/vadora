@@ -1,0 +1,256 @@
+{
+  "compare_products": {
+    "securitySchemes": [
+      {
+        "type": "noauth"
+      },
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ],
+    "ui": {
+      "resourceUri": "ui://vadora/marketplace"
+    }
+  },
+  "get_onboarding_state": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "merchant"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "get_order_status": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "get_product": {
+    "securitySchemes": [
+      {
+        "type": "noauth"
+      },
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ],
+    "ui": {
+      "resourceUri": "ui://vadora/marketplace"
+    }
+  },
+  "get_readiness": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "merchant"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "get_store_preview": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "merchant"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "list_merchant_orders": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "merchant"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "list_stores": {
+    "securitySchemes": [
+      {
+        "type": "noauth"
+      },
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "open_cart": {
+    "openai/ui": {
+      "entrypoints": [
+        {
+          "type": "thread"
+        }
+      ]
+    },
+    "securitySchemes": [
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ],
+    "ui": {
+      "resourceUri": "ui://vadora/cart"
+    }
+  },
+  "open_marketplace": {
+    "openai/ui": {
+      "entrypoints": [
+        {
+          "type": "global"
+        }
+      ]
+    },
+    "securitySchemes": [
+      {
+        "type": "noauth"
+      },
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ],
+    "ui": {
+      "resourceUri": "ui://vadora/marketplace"
+    }
+  },
+  "pause_products": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "merchant"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "publish_products": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "merchant"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "read_settings": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "search_mentions": {
+    "openai/extensions": {
+      "mentions/search": {}
+    },
+    "securitySchemes": [
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ],
+    "ui": {
+      "visibility": [
+        "app"
+      ]
+    }
+  },
+  "search_products": {
+    "securitySchemes": [
+      {
+        "type": "noauth"
+      },
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "set_cart": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "start_checkout": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ],
+    "ui": {
+      "visibility": [
+        "app"
+      ]
+    }
+  },
+  "start_store_connection": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "merchant"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "sync_products": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "merchant"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  },
+  "update_settings": {
+    "securitySchemes": [
+      {
+        "scopes": [
+          "shopper"
+        ],
+        "type": "oauth2"
+      }
+    ]
+  }
+}

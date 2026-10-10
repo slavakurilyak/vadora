@@ -59,3 +59,24 @@ export function context(view:View,comparison:string[]): Record<string,unknown> {
  if(view.order) value.order={number:view.order.number,total:view.order.total,payment_status:view.order.payment_status,fulfillment_status:view.order.fulfillment_status};
  return value;
 }
+
+export type Block={type:"text";text:string};
+// secretLike matches what must never reach the model or the composer: an address, a token, or a long opaque run.
+const secretLike=/\b(?:0x[0-9a-fA-F]{32,}|[1-9A-HJ-NP-Za-km-z]{32,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b/g;
+// plain keeps merchant supplied text short, free of control characters, and free of anything that looks like an address or a token.
+export function plain(value:string,limit=200):string {
+ return String(value).replace(secretLike,"[removed]").replace(/[\u0000-\u001f\u007f]/g," ").slice(0,limit);
+}
+// contextBlocks are the titled text blocks that tell the model what the shopper selected and what an order shows (011:148).
+// They hold listing data and the order number, total, and status, and never a delivery detail, a link, or a credential.
+export function contextBlocks(view:View,selected:Product[]):Block[] {
+ const blocks:Block[]=[];
+ for(const product of selected.slice(0,4)) blocks.push({type:"text",text:`Selected product: ${plain(product.title)}\nMerchant: ${plain(product.merchant)}\nPrice: ${plain(product.price,32)} ${plain(product.currency,8)}\n${product.available?"Available":"Unavailable"}`});
+ if(view.order) blocks.push({type:"text",text:`Order ${plain(view.order.number,32)}: total ${plain(view.order.total,32)}, payment ${plain(view.order.payment_status,32)}, fulfillment ${plain(view.order.fulfillment_status,32)}.`});
+ return blocks;
+}
+// composerMessage is the text that "Ask about this product" sends. It names the product and its merchant and nothing else:
+// no address, no token, and no quote amount (011:161).
+export function composerMessage(product:Product):Block[] {
+ return [{type:"text",text:`Tell me more about ${plain(product.title)} from ${plain(product.merchant)}.`}];
+}

@@ -1,0 +1,72 @@
+{
+  "ui://vadora/cart": {
+    "openai/ui": {
+      "availableDisplayModes": [
+        "inline",
+        "fullscreen"
+      ],
+      "preferredDisplayMode": "inline"
+    },
+    "openai/widgetCSP": {
+      "connect_domains": [
+        "https://api.vadora.test"
+      ],
+      "redirect_domains": [
+        "https://checkout.vadora.test",
+        "https://app.vadora.test"
+      ],
+      "resource_domains": [
+        "https://assets.vadora.test",
+        "https://cdn.shopify.com"
+      ]
+    },
+    "ui": {
+      "csp": {
+        "connectDomains": [
+          "https://api.vadora.test"
+        ],
+        "resourceDomains": [
+          "https://assets.vadora.test",
+          "https://cdn.shopify.com"
+        ]
+      },
+      "domain": "https://ui.vadora.test",
+      "prefersBorder": true
+    }
+  },
+  "ui://vadora/marketplace": {
+    "openai/ui": {
+      "availableDisplayModes": [
+        "inline",
+        "fullscreen"
+      ],
+      "preferredDisplayMode": "inline"
+    },
+    "openai/widgetCSP": {
+      "connect_domains": [
+        "https://api.vadora.test"
+      ],
+      "redirect_domains": [
+        "https://checkout.vadora.test",
+        "https://app.vadora.test"
+      ],
+      "resource_domains": [
+        "https://assets.vadora.test",
+        "https://cdn.shopify.com"
+      ]
+    },
+    "ui": {
+      "csp": {
+        "connectDomains": [
+          "https://api.vadora.test"
+        ],
+        "resourceDomains": [
+          "https://assets.vadora.test",
+          "https://cdn.shopify.com"
+        ]
+      },
+      "domain": "https://ui.vadora.test",
+      "prefersBorder": true
+    }
+  }
+}

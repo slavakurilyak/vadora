@@ -1,6 +1,6 @@
 import {App} from "@modelcontextprotocol/ext-apps";
 import {OpenAIExtensions} from "@openai/mcp-extensions/app";
-import {allowedImage,checkoutLink,context,deepLink,externalLink,type Product,type View} from "./state";
+import {allowedImage,checkoutLink,composerMessage,context,contextBlocks,deepLink,externalLink,type Product,type View} from "./state";
 const app=new App({name:"Vadora",version:"0.1.0"},{availableDisplayModes:["inline","fullscreen"]});
 const extensions=new OpenAIExtensions(app);
 const root=document.querySelector<HTMLElement>("#app")!;
@@ -11,6 +11,13 @@ let openedCart=false;
 let updateId:string|undefined;
 let changing=false;
 let generation=0;
+const seen=new Map<string,Product>();
+function remember(products:Product[]):void {for(const product of products)seen.set(product.id,product);}
+function selectedProducts():Product[] {
+ const ids=new Set<string>(comparison);
+ if(view.cart)ids.add(view.cart.listing_id);
+ return [...ids].map(id=>seen.get(id)).filter((product):product is Product=>product!==undefined);
+}
 function text(tag:string,value:string,className=""):HTMLElement {
  const node=document.createElement(tag);node.textContent=value;node.className=className;return node;
 }
@@ -41,8 +48,9 @@ async function refresh():Promise<void> {
  view=next;render();await publishContext();
 }
 async function publishContext():Promise<void> {
+ remember([...(view.products??[]),...(view.product?[view.product]:[])]);
  if(!extensions.modelContext) return;
- const result=await extensions.modelContext.update({structuredContent:context(view,comparison)});
+ const result=await extensions.modelContext.update({content:contextBlocks(view,selectedProducts()),structuredContent:context(view,comparison)});
  updateId=result?.updateId;
 }
 function productCard(product:Product):HTMLElement {
@@ -52,6 +60,7 @@ function productCard(product:Product):HTMLElement {
  card.append(text("h3",product.title),text("p",product.merchant),text("p",`${product.price} ${product.currency}`),text("p",product.available?"Available":"Unavailable"));
  const quantity=document.createElement("input");quantity.type="number";quantity.min="1";quantity.max="100";quantity.value="1";quantity.setAttribute("aria-label","Quantity");card.append(quantity);
  card.append(action("Select",async()=>{const n=Number(quantity.value);if(!Number.isInteger(n)||n<1||n>100)throw new Error("Invalid quantity");view=await call("set_cart",{listing_id:product.id,variant_id:product.variant_id,quantity:n});openedCart=true;render();await publishContext();},!product.available));
+ if(extensions.message)card.append(action("Ask about this product",async()=>{await extensions.message?.send({role:"user",content:composerMessage(product)});}));
  card.append(action(comparison.includes(product.id)?"Selected for comparison":"Compare",async()=>{if(comparison.includes(product.id))comparison=comparison.filter(id=>id!==product.id);else if(comparison.length<4)comparison.push(product.id);render();await publishContext();}));
  return card;
 }
