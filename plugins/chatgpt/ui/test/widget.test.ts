@@ -1,40 +1,20 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {mount} from "../src/widget.ts";
-import {click,settle,SimExtensions,SimHost,SimPage,type FakeElement,type Handler} from "./sim.ts";
+import {click,settle,SimExtensions,SimHost,SimPage,type Handler} from "./sim.ts";
+import {cartOf,checkout,kettle,marketplace,one,open,orderOf,result,scarf} from "./world.ts";
 
 // These tests run the widget against a simulated host. The widget is the real one: the same code that the conversation
-// loads, given a host that answers its tool calls, opens its links, and reports what the model does.
-
-const kettle={id:"lst_kettle",variant_id:"lst_kettle",title:"TEST ceramic kettle",merchant:"TEST store",price:"5.00",currency:"USD",available:true};
-const scarf={id:"lst_scarf",variant_id:"lst_scarf",title:"TEST wool scarf",merchant:"TEST store",price:"25.00",currency:"USD",available:false};
-const checkout="https://checkout.vadora.xyz/pay?listing=lst_kettle&variant=lst_kettle&quantity=2";
-const cartOf=(quantity:number)=>({listing_id:"lst_kettle",variant_id:"lst_kettle",quantity});
-const orderOf=(payment:string)=>({number:"ORD-7",total:"11.00 USDC",payment_status:payment,fulfillment_status:payment==="paid"?"received":"awaiting_payment",
- receipt_url:"https://checkout.vadora.xyz/orders/ord_7"});
-const marketplace={products:[kettle,scarf],stores:[{id:"s1",name:"TEST store",url:"https://vadora.xyz/stores/s1"}],settings:{mode:"shop"}};
-
-// open mounts the widget in a simulated host, has the host deliver the result of the tool call that opened it, and lets
-// everything that the widget started finish.
-async function open(initial:unknown,server:Record<string,Handler>={}) {
- const host=new SimHost();host.server=server;
- const extensions=new SimExtensions();
- const page=new SimPage();
- mount(host,extensions,page.asPage());
- await settle();
- host.deliver(initial);
- await settle();
- return {host,extensions,page,root:page.root};
-}
-const result=(structuredContent:unknown)=>({structuredContent});
-const one=(buttons:FakeElement[]):FakeElement=>{assert.equal(buttons.length,1,"exactly one such button");return buttons[0];};
+// loads, given a host that answers its tool calls, opens its links, and reports what the model does. They run the fullscreen
+// view, which has every control, and inline.test.ts runs the inline view.
 
 test("the global entrypoint renders the marketplace from the initial tool result with no second tool call",async()=>{
  const {host,root}=await open(marketplace);
  assert.equal(host.calls.length,0);
  const page=root.text();
- for(const want of ["Vadora","TEST ceramic kettle","5.00 USD","Available","TEST wool scarf","25.00 USD","Unavailable","Coming soon: Base, Ethereum, MPP, UCP, ACP, WooCommerce, Claude Code"])
+ for(const want of ["Marketplace","TEST ceramic kettle","5.00 USD","Available","TEST wool scarf","25.00 USD","Unavailable","Coming soon: Base, Ethereum, MPP, UCP, ACP, WooCommerce, Claude Code"]) {
   assert.ok(page.includes(want),want);
+ }
  one(root.buttons("TEST store"));
  assert.equal(root.buttons("Select").length,2);
  assert.equal(root.buttons("Select").filter(button=>button.disabled).length,1,"an unavailable product cannot be selected");
@@ -60,12 +40,7 @@ test("the account's mode decides the view, and the toolbar switches between shop
  assert.equal(sell.root.buttons("Search").length,0,"the merchant workspace shows no product search");
  await click(one(sell.root.buttons("Sell")));
  assert.deepEqual(sell.host.opened,["https://app.vadora.xyz/"]);
- await click(one(sell.root.buttons("Expand")));
- assert.deepEqual(sell.host.displayModes,["fullscreen"]);
-
- const inline=new SimHost();inline.context={availableDisplayModes:["inline"]};
- const page=new SimPage();mount(inline,new SimExtensions(),page.asPage());await settle();inline.deliver(marketplace);await settle();
- assert.equal(page.root.buttons("Expand").length,0,"a host without fullscreen gets no expand button");
+ assert.equal(sell.root.buttons("Expand").length,0,"the fullscreen view is already expanded");
 
  const both=await open({...marketplace,settings:{mode:"both"}},{
   open_cart:()=>result({cart:cartOf(1),product:kettle,checkout_enabled:true}),
@@ -207,6 +182,19 @@ test("comparing products reads the server's comparison, at most four at a time",
  const page=root.text();
  assert.ok(page.includes("Product comparison"));
  assert.ok(page.includes("TEST item 4"));
+});
+
+test("the comparison has a row for every attribute that any product has, and says unknown where a product has none",async()=>{
+ const red={...kettle,id:"lst_red",variant_id:"lst_red",title:"TEST red kettle",attributes:{Color:"red",Material:"steel"}};
+ const plain={...kettle,id:"lst_plain",variant_id:"lst_plain",title:"TEST plain kettle",attributes:{Material:"clay",Weight:"1kg"}};
+ const {root}=await open({products:[red,plain],settings:{mode:"shop"}},{compare_products:()=>result({products:[red,plain]})});
+ for(const card of root.all().filter(node=>node.tagName==="article")) {
+  await click(card.buttons("Compare")[0]);
+ }
+ await click(one(root.buttons("Compare 2 products")));
+ const rows=root.all().filter(node=>node.tagName==="tr").map(row=>row.children.map(cell=>cell.text()));
+ assert.deepEqual(rows,[["Title","TEST red kettle","TEST plain kettle"],["Price","5.00 USD","5.00 USD"],["Color","red","unknown"],["Material","steel","clay"],["Weight","unknown","1kg"]]);
+ assert.equal(root.all().filter(node=>node.tagName==="caption").map(node=>node.text()).join(),"Product comparison");
 });
 
 test("Ask about this product puts the product and its merchant in the composer and nothing else",async()=>{

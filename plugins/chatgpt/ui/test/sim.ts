@@ -2,7 +2,7 @@
 // its tool calls and opens its links, the OpenAI extensions that carry the model context and the composer, and the page
 // with its document and its window. The widget runs here exactly as it runs in the conversation, so a test can open it
 // with a tool result, click what a person clicks, and read what a person reads (011:106).
-import type {Extensions,Host,Page,ToolResult} from "../src/widget.ts";
+import type {Extensions,Host,HostContext,Page,ToolResult} from "../src/widget.ts";
 
 // FakeElement is the small part of a DOM element that the widget uses.
 export class FakeElement {
@@ -48,9 +48,13 @@ export class SimHost implements Host {
  opened:string[]=[];
  displayModes:string[]=[];
  server:Record<string,Handler>={};
- context:{availableDisplayModes?:string[]}|undefined={availableDisplayModes:["inline","fullscreen"]};
+ context:HostContext|undefined={availableDisplayModes:["inline","fullscreen"],displayMode:"inline"};
+ // A host grants a request for another display mode, and announces the change in the host context. The MCP Apps examples
+ // only answer with the mode that was set, so a test can turn the announcement off.
+ grants=true;
+ announces=true;
  ontoolresult:((result:ToolResult)=>void)|undefined;
- onhostcontextchanged:(()=>void)|undefined;
+ onhostcontextchanged:((changed?:HostContext)=>void)|undefined;
  async callServerTool(params:{name:string;arguments:Record<string,unknown>}):Promise<ToolResult>{
   this.calls.push({name:params.name,args:params.arguments});
   const handler=this.server[params.name];
@@ -58,8 +62,15 @@ export class SimHost implements Host {
   return handler(params.arguments);
  }
  async openLink(params:{url:string}):Promise<void>{this.opened.push(params.url);}
- getHostContext():{availableDisplayModes?:string[]}|undefined{return this.context;}
- async requestDisplayMode(params:{mode:"inline"|"fullscreen"}):Promise<void>{this.displayModes.push(params.mode);}
+ getHostContext():HostContext|undefined{return this.context;}
+ async requestDisplayMode(params:{mode:"inline"|"fullscreen"}):Promise<{mode?:string}|undefined>{
+  this.displayModes.push(params.mode);
+  const mode=this.grants?params.mode:(this.context?.displayMode??"inline");
+  if(this.grants&&this.announces)this.setMode(mode);
+  return {mode};
+ }
+ // setMode is the host changing the display mode and saying so, as when the person closes the fullscreen view.
+ setMode(mode:string):void{this.context={...this.context,displayMode:mode};this.onhostcontextchanged?.({displayMode:mode});}
  async connect():Promise<void>{}
  // deliver is the host passing the widget the result of the tool call that opened it.
  deliver(structuredContent:unknown):void{this.ontoolresult?.({structuredContent});}
@@ -84,11 +95,13 @@ export class SimExtensions implements Extensions {
 export class SimPage {
  document=new FakeDocument();
  listeners=new Map<string,Array<()=>void>>();
+ // styled holds each host context that the widget passed on for the page to take its theme and variables from.
+ styled:Array<HostContext|undefined>=[];
  window={
   openai:undefined as {openExternal?:(args:{href:string})=>void}|undefined,
   addEventListener:(type:string,listener:()=>void)=>{const list=this.listeners.get(type)??[];list.push(listener);this.listeners.set(type,list);},
  };
- asPage():Page{return {document:this.document as unknown as Document,window:this.window};}
+ asPage():Page{return {document:this.document as unknown as Document,window:this.window,styleHost:context=>{this.styled.push(context);}};}
  fire(type:string):void{for(const listener of this.listeners.get(type)??[])listener();}
  get root():FakeElement{return this.document.app;}
 }
