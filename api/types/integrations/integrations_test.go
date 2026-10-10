@@ -1,6 +1,9 @@
 package integrations
 
-import "testing"
+import (
+	"regexp"
+	"testing"
+)
 
 // TestEveryNamedDeferredIntegrationIsVisible proves the overview lists every
 // deferred integration with the exact visible label and the machine readable
@@ -157,5 +160,20 @@ func TestAllReturnsACopy(t *testing.T) {
 	second := All()
 	if second[0].DisplayName == "edited" {
 		t.Fatal("All exposed the catalog itself")
+	}
+}
+
+// conceptToken matches a specification concept written between colons, such as :HostExtensionLayer:, which belongs to the
+// specifications and never to a page that a person reads.
+var conceptToken = regexp.MustCompile(`:[A-Z][A-Za-z]+:`)
+
+// TestNoIntegrationTextShowsASpecificationConceptToken proves that the words an overview shows for an integration are plain words.
+func TestNoIntegrationTextShowsASpecificationConceptToken(t *testing.T) {
+	for _, entry := range All() {
+		for _, text := range []string{entry.DisplayName, entry.Note, entry.Label()} {
+			if found := conceptToken.FindString(text); found != "" {
+				t.Errorf("%s shows the specification token %q in %q", entry.ID, found, text)
+			}
+		}
 	}
 }

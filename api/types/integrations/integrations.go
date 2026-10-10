@@ -240,7 +240,7 @@ var catalog = []Integration{
 		Category:       AgentHosts,
 		Status:         StatusComingSoon,
 		Rank:           3,
-		Note:           "The next :HostExtensionLayer:, expected to follow as its own specification.",
+		Note:           "The next host extension layer, expected to follow as its own specification.",
 		ActionsEnabled: false,
 	},
 }
