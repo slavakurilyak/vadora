@@ -15,7 +15,7 @@ const stage=document.getElementById("stage") as HTMLElement;
 const holder=document.getElementById("frame") as HTMLElement;
 const logBox=document.getElementById("log") as HTMLElement;
 
-for(const id of ["scenario","mode","theme","scale","width","order","variables"]) {
+for(const id of ["scenario","mode","theme","scale","width","order","variables","isolation"]) {
  const wanted=query.get(id);
  if(wanted!==null)field(id).value=wanted;
  field(id).addEventListener("change",()=>{void start();});
@@ -54,7 +54,10 @@ async function start():Promise<void> {
  holder.querySelector("iframe")?.remove();
  const frame=document.createElement("iframe");
  frame.title="Vadora widget";
- frame.setAttribute("sandbox","allow-scripts allow-same-origin allow-popups");
+ // The isolated frame has the null origin that a host gives the widget, so the widget can read nothing of this page and loads its
+ // files across origins. The shared frame is easier to inspect and sets the text size.
+ const isolated=field("isolation").value==="isolated";
+ frame.setAttribute("sandbox",isolated?"allow-scripts allow-popups":"allow-scripts allow-same-origin allow-popups");
  holder.append(frame);
  layout(frame,mode);
  const context:Record<string,unknown>={displayMode:mode,availableDisplayModes:["inline","fullscreen"],theme};
@@ -96,11 +99,12 @@ async function start():Promise<void> {
   void bridge.sendHostContextChange({displayMode:"inline"} as never);
  };
  const initialized=new Promise<void>(resolve=>{bridge.oninitialized=()=>resolve();});
- frame.src="/frame.html";
+ if(isolated)frame.srcdoc=await (await fetch("/frame.html")).text();
+ else frame.src="/frame.html";
  await bridge.connect(new PostMessageTransport(frame.contentWindow!,frame.contentWindow!));
  await initialized;
  if(mine!==session)return;
- frame.contentDocument!.documentElement.style.fontSize=`${field("scale").value}%`;
+ if(!isolated)frame.contentDocument!.documentElement.style.fontSize=`${field("scale").value}%`;
  await bridge.sendToolResult({content:[],structuredContent:world.initial(scenario)} as never);
  log(`opened ${scenario} in ${mode}`);
 }

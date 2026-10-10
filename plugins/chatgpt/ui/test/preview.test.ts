@@ -14,7 +14,7 @@ const asset=(name:string)=>readFileSync(new URL(`../../assets/${name}`,import.me
 
 async function get(origin:string,pathname:string,init?:RequestInit) {
  const response=await fetch(origin+pathname,init);
- return {status:response.status,body:Buffer.from(await response.arrayBuffer())};
+ return {status:response.status,body:Buffer.from(await response.arrayBuffer()),headers:response.headers};
 }
 
 test("the preview listens on the loopback address and serves the host page, the widget files, and nothing else",async()=>{
@@ -39,6 +39,23 @@ test("the preview listens on the loopback address and serves the host page, the 
    assert.equal((await get(origin,other)).status,404,other);
   }
   assert.equal((await get(origin,"/",{method:"POST"})).status,404);
+ } finally {
+  server.closeAllConnections();
+  server.close();
+ }
+});
+
+test("the preview serves the widget files to a frame of another origin, as the assets origin does, and no other file",async()=>{
+ const {server,origin}=await startPreview(0);
+ try {
+  for(const file of ["/chatgpt/widget.js","/chatgpt/widget.css"]) {
+   const answer=await get(origin,file);
+   assert.equal(answer.headers.get("access-control-allow-origin"),"*",`${file} names every origin, so a sandboxed frame with the null origin loads it`);
+   assert.equal(answer.headers.get("cross-origin-resource-policy"),"cross-origin");
+  }
+  for(const file of ["/","/host.js","/frame.html"]) {
+   assert.equal((await get(origin,file)).headers.get("access-control-allow-origin"),null,`${file} opens itself to no other origin`);
+  }
  } finally {
   server.closeAllConnections();
   server.close();

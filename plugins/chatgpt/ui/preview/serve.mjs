@@ -21,9 +21,13 @@ const routes={
  "/":async()=>({type:"text/html; charset=utf-8",body:await readFile(path.join(here,"host.html"))}),
  "/host.js":async()=>({type:"text/javascript; charset=utf-8",body:await hostScript()}),
  "/frame.html":async origin=>({type:"text/html; charset=utf-8",body:(await readFile(path.join(assets,"widget.html"),"utf8")).replaceAll("{{ASSET_ORIGIN}}",origin)}),
- "/chatgpt/widget.js":async()=>({type:"text/javascript; charset=utf-8",body:await readFile(path.join(assets,"widget.js"))}),
- "/chatgpt/widget.css":async()=>({type:"text/css; charset=utf-8",body:await readFile(path.join(assets,"widget.css"))}),
+ "/chatgpt/widget.js":async()=>({type:"text/javascript; charset=utf-8",body:await readFile(path.join(assets,"widget.js")),shared:true}),
+ "/chatgpt/widget.css":async()=>({type:"text/css; charset=utf-8",body:await readFile(path.join(assets,"widget.css")),shared:true}),
 };
+
+// sharedHeaders are what the assets origin sends with the widget files. A host runs the widget in a sandboxed frame whose origin
+// is null, and a browser fetches a module script in CORS mode, so the script loads only when the response names every origin.
+const sharedHeaders={"access-control-allow-origin":"*","cross-origin-resource-policy":"cross-origin"};
 
 function refuse(response,status,message) {
  response.writeHead(status,{"content-type":"text/plain"});
@@ -39,8 +43,8 @@ export function startPreview(port=4173) {
   const route=routes[new URL(request.url??"/",origin).pathname];
   if(request.method!=="GET"||!route) {refuse(response,404,"not found");return;}
   try {
-   const {type,body}=await route(origin);
-   response.writeHead(200,{"content-type":type,"cache-control":"no-store"});
+   const {type,body,shared}=await route(origin);
+   response.writeHead(200,{"content-type":type,"cache-control":"no-store",...(shared?sharedHeaders:{})});
    response.end(body);
   } catch(error) {
    refuse(response,500,String(error));
